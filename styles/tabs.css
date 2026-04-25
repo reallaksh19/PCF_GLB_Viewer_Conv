@@ -1,0 +1,52 @@
+/* tabs.css — Tab bar and main layout */
+
+#app-layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+#tab-bar {
+  display: flex;
+  background: var(--color-primary-dark);
+  padding: 0 8px;
+  gap: 2px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  position: relative;
+  z-index: 5000;
+}
+
+.tab-btn {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: #a0b8d0;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  white-space: nowrap;
+  border-bottom: 3px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.tab-btn:hover        { color: #e0eaf4; border-bottom-color: rgba(255,255,255,0.3); }
+.tab-btn.active       { color: #fff; border-bottom-color: var(--color-accent); background: rgba(255,255,255,0.08); }
+.tab-btn[data-tab="debug"] { color: #7090a8; font-weight: 400; }
+.tab-btn[data-tab="debug"]:hover  { color: #a0b8d0; }
+.tab-btn[data-tab="debug"].active { color: #e0a870; border-bottom-color: #e0a870; }
+
+#tab-content {
+  flex: 1;
+  overflow-y: auto;
+  background: #fff;
+  position: relative;
+  z-index: 0;
+}
+
+/* Print-only section wrappers (hidden on screen, shown only at @media print) */
+.print-only { display: none !important; }

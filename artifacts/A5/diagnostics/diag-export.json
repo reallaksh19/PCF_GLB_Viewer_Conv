@@ -1,0 +1,62 @@
+{
+  "exportedAt": "2026-04-24T03:51:50.580Z",
+  "logs": [
+    {
+      "id": "0gis0c04x",
+      "timestamp": 1777002710577,
+      "severity": "error",
+      "category": "ui",
+      "message": "[UI_NOTIFICATION] Import Failed: Missing XML file",
+      "objectId": null,
+      "rowId": null,
+      "lineNo": null,
+      "componentType": null,
+      "propertyName": null,
+      "expectedValue": null,
+      "actualValue": null,
+      "ruleId": null,
+      "ruleText": null,
+      "sourceFile": null,
+      "sourceTable": null,
+      "resolved": false,
+      "tags": []
+    }
+  ],
+  "traceEvents": [],
+  "supportDebug": [
+    {
+      "supportKind": "RST",
+      "friction": 0.3,
+      "gap": "empty",
+      "name": "CA150",
+      "description": "Rest / Anchor"
+    },
+    {
+      "supportKind": "GDE",
+      "friction": 0.15,
+      "gap": "any",
+      "name": "CA100",
+      "description": "Guide"
+    },
+    {
+      "supportKind": "RST",
+      "friction": 0.3,
+      "gap": ">0",
+      "name": "CA250",
+      "description": "Rest with Gap"
+    }
+  ],
+  "perf": {},
+  "notifications": [
+    {
+      "id": "5a470628-50e2-4f90-a34c-f94a06f88d80",
+      "ts": 1777002710577,
+      "level": "error",
+      "title": "Import Failed",
+      "message": "Missing XML file",
+      "details": {
+        "id": 123
+      }
+    }
+  ]
+}

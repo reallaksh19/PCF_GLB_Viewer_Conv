@@ -1,0 +1,380 @@
+/* base.css — CSS variables, reset, typography */
+
+:root {
+  --color-primary:      #1a5fa3;
+  --color-primary-dark: #0e3d6e;
+  --color-accent:       #e07020;
+  --color-pass:         #1a8040;
+  --color-fail:         #c0200c;
+  --color-warn:         #b07800;
+  --color-header-bg:    #1e2d42;
+  --color-header-text:  #e8f0f8;
+  --color-tab-bg:       #f0f4f8;
+  --color-tab-active:   #ffffff;
+  --color-border:       #c8d4e0;
+  --color-row-alt:      #f5f8fb;
+  --color-text:         #1a2030;
+  --color-muted:        #708090;
+  --font-mono:          "Courier New", "Consolas", monospace;
+  --font-body:          "Arial", "Helvetica Neue", sans-serif;
+  --radius:             3px;
+  --shadow:             0 1px 4px rgba(0,0,0,0.12);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-text);
+  background: #e8ecf0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── App header ─────────────────────────────────────────────── */
+#app-header {
+  background: var(--color-header-bg);
+  color: var(--color-header-text);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+#app-header .header-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+#app-header .header-sub {
+  font-size: 11px;
+  color: #a0b8d0;
+  margin-top: 2px;
+}
+#app-header .header-meta {
+  font-size: 11px;
+  color: #a0b8d0;
+  white-space: nowrap;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Editable fields styling */
+.editable-field {
+  outline: none;
+  border-bottom: 1px dashed transparent;
+  transition: all 0.2s;
+  cursor: text;
+}
+.editable-field:hover, .editable-field:focus {
+  border-bottom-color: var(--color-border);
+  background: rgba(255,255,255,0.1);
+}
+.docno-field.uninitialized,
+.note-field.uninitialized {
+  color: var(--color-accent);
+}
+
+
+/* Status bar */
+#app-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.08);
+  color: #a0c8e0;
+}
+#app-status.status-ok      { color: #6dd890; }
+#app-status.status-error   { color: #ff7060; }
+#app-status.status-loading { color: #aab0c8; font-style: italic; }
+
+/* ── Utility ────────────────────────────────────────────────── */
+.mono        { font-family: var(--font-mono); }
+.muted       { color: var(--color-muted); font-style: italic; }
+.center      { text-align: center; }
+.note-pass   { color: var(--color-pass); font-weight: 600; }
+
+.tab-note {
+  color: var(--color-muted);
+  font-style: italic;
+  margin: 12px 0;
+}
+
+/* Picker selector tables — hidden in print via .hide-on-print */
+.picker-block {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.02);
+  margin-bottom: 8px;
+}
+.picker-block input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--color-accent);
+}
+
+.sub-heading {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-accent);
+  margin: 10px 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.section-heading {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-primary-dark);
+  border-bottom: 2px solid var(--color-primary);
+  padding-bottom: 4px;
+  margin: 16px 0 10px;
+}
+
+.sub-heading {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+  margin: 12px 0 6px;
+}
+
+/* ── Buttons ────────────────────────────────────────────────── */
+.btn-primary, .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-body);
+  transition: background 0.15s;
+}
+.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+.btn-primary:hover   { background: var(--color-primary-dark); }
+.btn-primary:disabled { background: #aaa; cursor: not-allowed; }
+
+.btn-secondary {
+  background: #fff;
+  color: var(--color-primary);
+  border: 1px solid var(--color-border);
+}
+.btn-secondary:hover { background: var(--color-tab-bg); }
+
+.file-label {
+  cursor: pointer;
+  background: #fff;
+  color: var(--color-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 5px 12px;
+  font-size: 12px;
+  transition: background 0.15s;
+}
+.file-label:hover { background: var(--color-tab-bg); }
+
+.btn-remove {
+  background: none;
+  border: none;
+  color: var(--color-fail);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  line-height: 1;
+}
+.btn-remove:hover { color: #800; }
+
+/* ── Badges ─────────────────────────────────────────────────── */
+.badge,
+.badge-pass, .badge-fail,
+.badge-ok, .badge-warn, .badge-error, .badge-neutral,
+.badge-parsed, .badge-static {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.badge-pass { background: #d4edda; color: var(--color-pass); border: 1px solid #a5d6b5; }
+.badge-fail { background: #fde8e8; color: var(--color-fail); border: 1px solid #f5b5b5; }
+
+/* ── Validation banner ──────────────────────────────────────── */
+.validation-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+}
+.banner-ok    { background: #d4edda; color: var(--color-pass); }
+.banner-warn  { background: #fff3cd; color: var(--color-warn); }
+.banner-error { background: #fde8e8; color: var(--color-fail); }
+.banner-info  { background: #dce8f8; color: var(--color-primary); }
+
+/* ── Report section wrapper ─────────────────────────────────── */
+.report-section {
+  padding: 16px 20px;
+  max-width: 1100px;
+}
+
+/* ── Lists ──────────────────────────────────────────────────── */
+.conclusion-list, .assumption-list {
+  margin: 8px 0 8px 20px;
+  line-height: 1.8;
+}
+.conclusion-list li { list-style: none; }
+.assumption-list li { list-style: decimal; }
+
+/* ── Toggle switch (scope) ──────────────────────────────────── */
+.toggle-label {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  gap: 0;
+}
+.toggle-label input[type="checkbox"] {
+  appearance: none;
+  width: 36px;
+  height: 20px;
+  background: #ccc;
+  border-radius: 10px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.toggle-label input[type="checkbox"]:checked { background: var(--color-pass); }
+.toggle-label input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  top: 2px; left: 2px;
+  transition: left 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.toggle-label input[type="checkbox"]:checked::after { left: 18px; }
+
+/* Section disabled logic via toggle */
+.disabled-section {
+  color: var(--color-muted);
+  opacity: 0.5;
+}
+
+.disabled-section > *:not(.toggle-inline) {
+  pointer-events: none;
+}
+
+/* Scope rows */
+.scope-list { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; }
+.scope-row  {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+.scope-label { font-size: 13px; flex: 1; }
+.scope-conclusion { font-size: 12px; font-weight: 600; color: var(--color-pass); }
+.scope-conclusion.hidden { display: none; }
+.scope-conclusion.visible { display: inline; }
+
+/* Inline toggle (geometry tab) */
+.toggle-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.toggle-inline input[type="checkbox"] {
+  width: 14px; height: 14px; cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+/* ── Table scroll wrapper ───────────────────────────────────── */
+.table-scroll {
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+/* ── File controls row ──────────────────────────────────────── */
+.file-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+/* ── Loads picker ───────────────────────────────────────────── */
+.loads-picker {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+.loads-picker select {
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-family: var(--font-body);
+  background: #fff;
+}
+.loads-picker select:disabled { background: #f0f0f0; color: #aaa; }
+
+.load-preview {
+  margin: 8px 0;
+  overflow-x: auto;
+}
+
+/* ── Report header block (summary tab) ──────────────────────── */
+.report-header-block {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  background: #fff;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+.report-header-left { flex: 1; }
+.report-title  { font-size: 15px; font-weight: 700; color: var(--color-primary-dark); }
+.report-subtitle { font-size: 12px; color: var(--color-muted); margin-top: 4px; }
+.meta-table { border-collapse: collapse; font-size: 12px; }
+.meta-table td { padding: 2px 8px; }
+.meta-table td:first-child { font-weight: 600; color: var(--color-muted); text-align: right; }
+.params-table .param-key { font-weight: 700; font-family: var(--font-mono); }
+

@@ -1,0 +1,1904 @@
+/**
+ * viewer-3d.js — Three.js 3D visualization of PCF components (vanilla JS)
+ * Ported from 3Dmodelgeneratorforpcf_Viewer.jsx (React/R3F) to raw Three.js.
+ *
+ * Exports:
+ *   PcfViewer3D class
+ */
+
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { state } from './core/state.js';
+import { computeBoundingMeasurement } from './js/pcf2glb/pro-editor/core/measureUtils.js';
+
+let CURRENT_VERTICAL_AXIS = 'Z';
+
+function _verticalVector() {
+    return CURRENT_VERTICAL_AXIS === 'Z'
+        ? new THREE.Vector3(0, 0, 1)
+        : new THREE.Vector3(0, 1, 0);
+}
+
+function _verticalComponent(parts) {
+    return CURRENT_VERTICAL_AXIS === 'Z' ? parts[2] : parts[1];
+}
+
+// ── Color palette ──────────────────────────────────────────────────
+const COLORS = {
+    PIPE: 0x1e90ff,  // Dodger Blue
+    FLANGE: 0xff4500,  // Orange Red
+    VALVE: 0x32cd32,  // Lime Green
+    TEE: 0xffd700,  // Gold
+    ELBOW: 0x8a2be2,  // Blue Violet
+    SUPPORT: 0x00c853,  // Green
+    ANCI: 0xff3b30,  // Red
+    BEND: 0x8a2be2,
+    REDUCER: 0xff69b4,  // Hot Pink
+    UNKNOWN: 0xd3d3d3,  // Light Grey
+};
+
+// ── Coordinate mapping (PCF → Three.js) ────────────────────────────
+// PCF: X=East, Y=North, Z=Up
+// Three: X=right, Y=up, Z=towards viewer
+const mapCoord = (p) => {
+    if (!p) return null;
+    if (CURRENT_VERTICAL_AXIS === 'Y') {
+        // Source Y is vertical => map Y into world-Y.
+        return new THREE.Vector3(-p.z, p.y, -p.x);
+    }
+    return new THREE.Vector3(-p.y, p.z, -p.x);
+};
+
+// ── Cylinder helper ────────────────────────────────────────────────
+function createCylinder(startVec, endVec, radius, color, materialOverride = null) {
+    const diff = new THREE.Vector3().subVectors(endVec, startVec);
+    const length = diff.length();
+    if (length < 0.1) return null;
+
+    const mid = new THREE.Vector3().addVectors(startVec, endVec).multiplyScalar(0.5);
+    const axis = new THREE.Vector3(0, 1, 0);
+    const quat = new THREE.Quaternion().setFromUnitVectors(axis, diff.clone().normalize());
+
+    const geo = new THREE.CylinderGeometry(radius, radius, length, 16);
+    const mat = materialOverride || new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.15 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(mid);
+    mesh.quaternion.copy(quat);
+    return mesh;
+}
+
+// ── Disc (flat cylinder) helper ────────────────────────────────────
+function createDisc(pos, normal, outerRadius, thickness, color, materialOverride = null) {
+    const geo = new THREE.CylinderGeometry(outerRadius, outerRadius, thickness, 20);
+    const mat = materialOverride || new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.15 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(pos);
+    // Align cylinder Y-axis to normal
+    const axis = new THREE.Vector3(0, 1, 0);
+    mesh.quaternion.setFromUnitVectors(axis, normal.clone().normalize());
+    return mesh;
+}
+
+function createSphere(pos, radius, color, materialOverride = null) {
+    const geo = new THREE.SphereGeometry(radius, 16, 16);
+    const mat = materialOverride || new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.12 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(pos);
+    return mesh;
+}
+
+function createTubeFromCurve(curve, radius, color, tubularSegments = 24, radialSegments = 14, materialOverride = null) {
+    const geo = new THREE.TubeGeometry(curve, tubularSegments, radius, radialSegments, false);
+    const mat = materialOverride || new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.15 });
+    return new THREE.Mesh(geo, mat);
+}
+
+// ── Box (for fixed support) helper ─────────────────────────────────
+function createBox(pos, hw, color, wireframe = false, materialOverride = null) {
+    const geo = new THREE.BoxGeometry(hw, hw, hw);
+    const mat = materialOverride || (wireframe
+        ? new THREE.MeshBasicMaterial({ color, wireframe: true })
+        : new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.12 }));
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(pos);
+    return mesh;
+}
+
+function makeArrow(direction, offset, od, color, materialOverride = null) {
+    const arrowLen = 1.5 * od;
+    const shaftR = 0.075 * od;
+    const headLen = 0.4 * od;
+    const headR = 0.175 * od;
+    const shaftLen = arrowLen - headLen;
+
+    const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(shaftR, shaftR, shaftLen, 8),
+        materialOverride || new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.12 })
+    );
+    const head = new THREE.Mesh(
+        new THREE.ConeGeometry(headR, headLen, 8),
+        materialOverride || new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.12 })
+    );
+
+    const arrowGroup = new THREE.Group();
+    arrowGroup.add(shaft);
+    arrowGroup.add(head);
+
+    shaft.position.copy(direction).multiplyScalar(offset + shaftLen / 2);
+    head.position.copy(direction).multiplyScalar(offset + shaftLen + headLen / 2);
+
+    const up = new THREE.Vector3(0, 1, 0);
+    if (up.distanceTo(direction) < 0.001) {
+        // already aligned
+    } else if (up.distanceTo(direction.clone().negate()) < 0.001) {
+        shaft.rotateX(Math.PI);
+        head.rotateX(Math.PI);
+    } else {
+        const quat = new THREE.Quaternion().setFromUnitVectors(up, direction);
+        shaft.quaternion.copy(quat);
+        head.quaternion.copy(quat);
+    }
+
+    return arrowGroup;
+}
+
+function _supportKindFromText(text = '') {
+    const t = String(text).toUpperCase();
+    if (/\bCA100\b/.test(t)) return 'GUIDE';
+    if (/\bCA150\b|\bCA250\b/.test(t)) return 'REST';
+    if (/(^|[^A-Z0-9])(RIGID\s+)?ANC(HOR)?([^A-Z0-9]|$)|\bFIXED\b/.test(t)) return 'ANCHOR';
+    if (/\bGDE\b|\bGUI\b|GUIDE|SLIDE|SLID/.test(t)) return 'GUIDE';
+    if (/\bRST\b|\bREST\b|\+Y\s*SUPPORT|\bY\s*SUPPORT\b|\+Y\b/.test(t)) return 'REST';
+    if (/\bSTOP\b/.test(t)) return 'STOP';
+    if (/\bSPRING\b|\bHANGER\b/.test(t)) return 'SPRING';
+    return 'UNKNOWN';
+}
+
+function _supportKindFromToken(token = '') {
+    const t = String(token).toUpperCase().trim();
+    if (!t) return null;
+    if (t === 'ANC' || t === 'ANCHOR' || t === 'RIGID') return 'ANCHOR';
+    if (t === 'GDE' || t === 'GUI' || t === 'GUIDE') return 'GUIDE';
+    if (t === 'RST' || t === 'REST') return 'REST';
+    if (t === 'SPRING') return 'SPRING';
+    if (t === 'STOP' || t === 'STP') return 'STOP';
+    return null;
+}
+
+function _axisFromCosinesText(text = '') {
+    const parts = String(text)
+        .split(/[,\s]+/)
+        .map(v => Number(v))
+        .filter(v => Number.isFinite(v));
+    if (parts.length < 3) return null;
+    const axis = CURRENT_VERTICAL_AXIS === 'Y'
+        ? new THREE.Vector3(-parts[2], parts[1], -parts[0])
+        : new THREE.Vector3(-parts[1], parts[2], -parts[0]);
+    if (axis.length() < 0.01) return null;
+    return axis.normalize();
+}
+
+function _dofsFromText(text = '') {
+    return String(text)
+        .split(/[,\s]+/)
+        .map(v => Number(v))
+        .filter(v => Number.isFinite(v))
+        .map(v => Math.trunc(v));
+}
+
+function _semanticSupportKindFromAxisCosinesText(text = '') {
+    const parts = String(text)
+        .split(/[,\s]+/)
+        .map(v => Number(v))
+        .filter(v => Number.isFinite(v));
+    if (parts.length < 3) return null;
+    const x = parts[0];
+    const y = parts[1];
+    const z = parts[2];
+    const len = Math.hypot(x, y, z);
+    if (len < 1e-6) return null;
+    const vComp = CURRENT_VERTICAL_AXIS === 'Z' ? z : y;
+    const lateralMax = CURRENT_VERTICAL_AXIS === 'Z' ? Math.max(Math.abs(x), Math.abs(y)) : Math.max(Math.abs(x), Math.abs(z));
+    const verticalness = Math.abs(vComp) / len;
+    if (verticalness > 0.75) return 'REST';
+    if (lateralMax / len > 0.75) return 'GUIDE';
+    return null;
+}
+
+function _supportMaterial(color) {
+    return new THREE.MeshStandardMaterial({
+        color,
+        emissive: color,
+        emissiveIntensity: 0.2,
+        roughness: 0.32,
+        metalness: 0.08
+    });
+}
+
+function createSupportAssembly(pos, parts) {
+    const group = new THREE.Group();
+    group.position.copy(pos);
+    for (const part of parts) {
+        if (part) group.add(part);
+    }
+    return group;
+}
+
+function createArrowBetween(start, end, color, materialOverride = null, scale = 1) {
+    const dir = new THREE.Vector3().subVectors(end, start);
+    const len = dir.length();
+    if (len < 0.01) return null;
+
+    const material = materialOverride || new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.12 });
+    const headLen = Math.min(scale * 0.45, len * 0.45);
+    const shaftRadius = Math.max(scale * 0.075, 0.2);
+    const headRadius = Math.max(scale * 0.175, shaftRadius * 1.8);
+    const dirNorm = dir.clone().normalize();
+    const shaftEnd = end.clone().addScaledVector(dirNorm, -headLen);
+
+    const group = new THREE.Group();
+    const shaft = createCylinder(start, shaftEnd, shaftRadius, color, material);
+    if (shaft) group.add(shaft);
+
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(headRadius, headLen, 10), material);
+    cone.position.copy(end).addScaledVector(dirNorm, -headLen / 2);
+    cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dirNorm);
+    group.add(cone);
+    return group;
+}
+
+function _buildSupportFrame(pipeAxis, supportAxis) {
+    const vertical = _verticalVector();
+
+    let pipe = pipeAxis && pipeAxis.length() >= 0.01 ? pipeAxis.clone().normalize() : null;
+    if (!pipe) {
+        pipe = supportAxis && Math.abs(supportAxis.dot(vertical)) < 0.95
+            ? supportAxis.clone().normalize()
+            : new THREE.Vector3(1, 0, 0);
+    }
+
+    let lateral = null;
+    if (supportAxis && Math.abs(supportAxis.dot(vertical)) < 0.95) {
+        lateral = supportAxis.clone().normalize();
+    } else {
+        lateral = new THREE.Vector3().crossVectors(vertical, pipe);
+        if (lateral.length() < 0.01) {
+            const fallback = Math.abs(pipe.x) < 0.8
+                ? new THREE.Vector3(1, 0, 0)
+                : new THREE.Vector3(0, 0, 1);
+            lateral = new THREE.Vector3().crossVectors(vertical, fallback);
+        }
+        if (lateral.length() < 0.01) lateral = new THREE.Vector3(0, 0, 1);
+        lateral.normalize();
+    }
+
+    const pipeOrtho = new THREE.Vector3().crossVectors(lateral, vertical).normalize();
+    return { vertical, lateral, pipe: pipeOrtho };
+}
+
+// ── Main class ─────────────────────────────────────────────────────
+
+export class PcfViewer3D {
+    /**
+     * @param {HTMLElement} containerEl — DOM element to render into
+     */
+    constructor(containerEl, options = {}) {
+        this.container = containerEl;
+        this.options = options || {};
+        this.viewerConfig = this.options.viewerConfig || {};
+        this._onSelectionChange = typeof this.options.onSelectionChange === 'function' ? this.options.onSelectionChange : null;
+        this._onMeasurementChange = typeof this.options.onMeasurementChange === 'function' ? this.options.onMeasurementChange : null;
+        this._onTrace = typeof this.options.onTrace === 'function' ? this.options.onTrace : null;
+        this.scene = null;
+        this.camera = null;
+        this.renderer = null;
+        this.controls = null;
+        this._animId = null;
+        this._componentGroup = null;
+        this._legendLabelGroup = null;
+        this._heatmapPanelEl = null;
+        this.editor = null;
+        this._gridHelper = null;
+        this._raycaster = new THREE.Raycaster();
+        this._pointer = new THREE.Vector2();
+        this._componentMeshIndex = new Map();
+        this._selectedComponentId = null;
+        this._selectedOriginalMaterials = [];
+        this._navMode = 'orbit';
+        this._lastMeasurement = null;
+        this._clipPlanes = [];
+        this._sectionMode = 'OFF';
+        this._sectionBounds = null;
+        this._sectionVisual = null;
+        this._heatmapState = null;
+        this._projectionMode = String(this.viewerConfig?.camera?.projection || 'orthographic').toLowerCase();
+        this._palette = this._resolvePalette();
+        CURRENT_VERTICAL_AXIS = String(this.viewerConfig?.coordinateMap?.verticalAxis || 'Z').toUpperCase() === 'Y' ? 'Y' : 'Z';
+        this._init();
+    }
+
+    /** @private */
+    _init() {
+        const w = this.container.clientWidth || 800;
+        const h = this.container.clientHeight || 600;
+
+        // Scene
+        this.scene = new THREE.Scene();
+        const themeKey = this.viewerConfig?.scene?.themePreset || state.viewerSettings.themePreset || 'NavisDark';
+        const themeBg = themeKey === 'DrawLight' ? 0xf7f8fb
+            : themeKey === 'DrawDark' ? 0x0b1220
+            : 0x0f172a;
+        const background = String(this.viewerConfig?.scene?.background || 'auto').toLowerCase() === 'auto'
+            ? themeBg
+            : this.viewerConfig?.scene?.background;
+        this.scene.background = new THREE.Color(background);
+
+        // Camera — Orthographic
+        const aspect = w / h;
+        const frustum = Number(this.viewerConfig?.camera?.orthographicFrustum || 5000);
+        this._orthoCamera = new THREE.OrthographicCamera(
+            -frustum * aspect, frustum * aspect,
+            frustum, -frustum,
+            Number(this.viewerConfig?.camera?.near || -50000),
+            Number(this.viewerConfig?.camera?.far || 50000)
+        );
+        const initialPosition = this.viewerConfig?.camera?.initialPosition || [5000, 5000, 5000];
+        this._orthoCamera.position.set(Number(initialPosition[0] || 5000), Number(initialPosition[1] || 5000), Number(initialPosition[2] || 5000));
+        this._orthoCamera.lookAt(0, 0, 0);
+        this._perspCamera = new THREE.PerspectiveCamera(
+            Number(this.viewerConfig?.camera?.fov || 60),
+            aspect,
+            0.1,
+            1000000
+        );
+        this._perspCamera.position.copy(this._orthoCamera.position);
+        this._perspCamera.lookAt(0, 0, 0);
+        this.camera = this._projectionMode === 'perspective' ? this._perspCamera : this._orthoCamera;
+        this._applyUpVector();
+
+        // Renderer
+        this.renderer = new THREE.WebGLRenderer({ antialias: this.viewerConfig?.scene?.antialias !== false });
+        this.renderer.setSize(w, h);
+        this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.container.appendChild(this.renderer.domElement);
+
+        // CSS2D overlay renderer (for MESSAGE-CIRCLE / MESSAGE-SQUARE labels)
+        this._css2dRenderer = new CSS2DRenderer();
+        this._css2dRenderer.setSize(w, h);
+        this._css2dRenderer.domElement.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;overflow:hidden;';
+        this.container.style.position = 'relative';
+        this.container.appendChild(this._css2dRenderer.domElement);
+        this._msgCircleGroup = new THREE.Group();
+        this._msgSquareGroup = new THREE.Group();
+        this.scene.add(this._msgCircleGroup);
+        this.scene.add(this._msgSquareGroup);
+
+        // Controls (OrbitControls loaded via importmap)
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = this.viewerConfig?.controls?.enableDamping !== false;
+        this.controls.dampingFactor = Number(this.viewerConfig?.controls?.dampingFactor || 0.1);
+        this.controls.rotateSpeed = Number(this.viewerConfig?.controls?.rotateSpeed || 1);
+        this.controls.panSpeed = Number(this.viewerConfig?.controls?.panSpeed || 1);
+        this.controls.zoomSpeed = Number(this.viewerConfig?.controls?.zoomSpeed || 1);
+        this.controls.enablePan = this.viewerConfig?.controls?.enablePan !== false;
+        this.controls.enableZoom = this.viewerConfig?.controls?.enableZoom !== false;
+        this.controls.enableRotate = this.viewerConfig?.controls?.enableRotate !== false;
+        if (this.viewerConfig?.controls?.invertX) this.controls.rotateSpeed *= -1;
+        if (this.viewerConfig?.controls?.invertY) this.controls.rotateSpeed *= -1;
+        // C3: Refresh clipping planes on every orbit/pan so geometry never disappears
+        this.controls.addEventListener('change', () => {
+            this._emitTrace('orbit-change', { target: this.controls?.target?.toArray?.() || [] });
+            if (this._componentGroup) {
+                const box = new THREE.Box3().setFromObject(this._componentGroup);
+                if (!box.isEmpty()) {
+                    const sz = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(sz.x, sz.y, sz.z, 1);
+                    if (this.camera instanceof THREE.OrthographicCamera) {
+                        this.camera.near = -maxDim * 20;
+                        this.camera.far = maxDim * 20;
+                    } else {
+                        this.camera.near = 0.1;
+                        this.camera.far = maxDim * 50;
+                    }
+                    this.camera.updateProjectionMatrix();
+                }
+            }
+        });
+
+        // Lights
+        const ambient = new THREE.AmbientLight(0xffffff, Number(this.viewerConfig?.scene?.ambientIntensity ?? 0.6));
+        this.scene.add(ambient);
+
+        const point = new THREE.PointLight(0xffffff, Number(this.viewerConfig?.scene?.pointIntensity ?? 0.8));
+        point.position.set(2000, 4000, 2000);
+        this.scene.add(point);
+
+        const dir = new THREE.DirectionalLight(0xffffff, Number(this.viewerConfig?.scene?.directionalIntensity ?? 1.0));
+        dir.position.set(-1000, 5000, -2000);
+        this.scene.add(dir);
+
+        // Grid + Axes
+        const gridMajor = themeKey === 'DrawLight' ? 0xcfd6e2 : 0x3a4255;
+        const gridMinor = themeKey === 'DrawLight' ? 0xe6ebf2 : 0x252a3a;
+        this._gridHelper = new THREE.GridHelper(
+            Number(this.viewerConfig?.helpers?.gridSize || 10000),
+            Number(this.viewerConfig?.helpers?.gridDivisions || 20),
+            gridMajor,
+            gridMinor
+        );
+        this._gridHelper.visible = this.viewerConfig?.helpers?.showGrid !== false;
+        if (CURRENT_VERTICAL_AXIS === 'Z') {
+            this._gridHelper.rotation.x = Math.PI / 2;
+            this._gridHelper.position.z = -500;
+        } else {
+            this._gridHelper.rotation.x = 0;
+            this._gridHelper.position.y = -500;
+        }
+        this.scene.add(this._gridHelper);
+
+        const axes = new THREE.AxesHelper(1000);
+        axes.visible = this.viewerConfig?.helpers?.showAxes !== false;
+        this.scene.add(axes);
+
+        // Resize handler
+        this._onResize = () => {
+            const nw = this.container.clientWidth;
+            const nh = this.container.clientHeight;
+            const nAspect = nw / nh;
+            this._orthoCamera.left = -frustum * nAspect;
+            this._orthoCamera.right = frustum * nAspect;
+            this._orthoCamera.top = frustum;
+            this._orthoCamera.bottom = -frustum;
+            this._orthoCamera.updateProjectionMatrix();
+            this._perspCamera.aspect = nAspect;
+            this._perspCamera.updateProjectionMatrix();
+            this.renderer.setSize(nw, nh);
+            if (this._css2dRenderer) this._css2dRenderer.setSize(nw, nh);
+        };
+        window.addEventListener('resize', this._onResize);
+
+        // ViewCube (top-right) and Axis Gizmo (bottom-right)
+        if (this.viewerConfig?.helpers?.showViewCube !== false) this._buildViewCube();
+        if (this.viewerConfig?.helpers?.showAxisGizmo !== false) this._buildAxisGizmo();
+        this._bindInteractions();
+
+        // Start render loop
+        this._animate();
+    }
+
+    /** @private */
+    _animate() {
+        this._animId = requestAnimationFrame(() => this._animate());
+        if (this.controls) this.controls.update();
+        this.renderer.render(this.scene, this.camera);
+        if (this._css2dRenderer) this._css2dRenderer.render(this.scene, this.camera);
+        this._syncViewCube();
+        this._syncAxisGizmo();
+    }
+
+    /** @private — Build HTML ViewCube overlay in top-right */
+    _buildViewCube() {
+        const size = Number(this.viewerConfig?.overlay?.viewCubeSize || 90);
+        const posStyles = {
+            'top-left': 'top:12px;left:12px;',
+            'top-right': 'top:12px;right:12px;',
+            'bottom-left': 'bottom:12px;left:12px;',
+            'bottom-right': 'bottom:12px;right:12px;',
+        }[this.viewerConfig?.overlay?.viewCubePosition] || 'top:12px;right:12px;';
+        const cube = document.createElement('div');
+        cube.id = 'pcf-view-cube';
+        cube.style.cssText = `
+            position:absolute;${posStyles}width:${size}px;height:${size}px;
+            perspective:220px;cursor:pointer;user-select:none;z-index:10;
+            opacity:${this.viewerConfig?.overlay?.viewCubeOpacity ?? 0.85};transition:opacity 0.2s;
+        `;
+        cube.addEventListener('mouseenter', () => { cube.style.opacity = '1'; });
+        cube.addEventListener('mouseleave', () => { cube.style.opacity = String(this.viewerConfig?.overlay?.viewCubeOpacity ?? 0.85); });
+        const inner = document.createElement('div');
+        inner.style.cssText = `
+            width:100%;height:100%;position:relative;transform-style:preserve-3d;
+            transition:transform 0.05s linear;
+        `;
+        const half = size / 2;
+        // The cube is rotated relative to the camera snap directions in this
+        // viewer, so label the faces by the actual view they trigger.
+        const FACES = [
+            { label: 'Left', rot: 'rotateX(-90deg)', bg: '#3b6ea5', cam: [0, 1, 0], up: [0, 0, -1] },
+            { label: 'Right', rot: 'rotateX(90deg)', bg: '#2b5285', cam: [0, -1, 0], up: [0, 0, 1] },
+            { label: 'Front', rot: 'translateZ(' + half + 'px)', bg: '#4a7c95', cam: [0, 0, 1], up: [0, 1, 0] },
+            { label: 'Back', rot: 'rotateY(180deg) translateZ(' + half + 'px)', bg: '#4a7c95', cam: [0, 0, -1], up: [0, 1, 0] },
+            { label: 'Top', rot: 'rotateY(90deg) translateZ(' + half + 'px)', bg: '#3a6e85', cam: [1, 0, 0], up: [0, 1, 0] },
+            { label: 'Bottom', rot: 'rotateY(-90deg) translateZ(' + half + 'px)', bg: '#3a6e85', cam: [-1, 0, 0], up: [0, 1, 0] },
+        ];
+        for (const f of FACES) {
+            const face = document.createElement('div');
+            face.textContent = f.label;
+            face.style.cssText = `
+                position:absolute;width:${size}px;height:${size}px;
+                display:flex;align-items:center;justify-content:center;
+                font-size:11px;font-weight:700;color:#fff;background:${f.bg}cc;
+                border:1px solid #ffffff33;box-sizing:border-box;
+                transform:${f.rot};
+                backface-visibility:visible;
+            `;
+            face.addEventListener('mouseenter', () => { face.style.background = `${f.bg}ff`; });
+            face.addEventListener('mouseleave', () => { face.style.background = `${f.bg}cc`; });
+            face.addEventListener('click', () => this._snapCamera(f.cam, f.up));
+            inner.appendChild(face);
+        }
+        cube.appendChild(inner);
+        const cornerSpecs = [
+            { id: 'iso-ne-top', label: 'TR', title: 'Isometric Top-Right', style: 'top:-10px;right:-10px;', preset: 'isoNE' },
+            { id: 'iso-nw-top', label: 'TL', title: 'Isometric Top-Left', style: 'top:-10px;left:-10px;', preset: 'isoNW' },
+            { id: 'iso-se-bot', label: 'BR', title: 'Isometric Bottom-Right', style: 'bottom:-10px;right:-10px;', preset: 'isoSE' },
+            { id: 'iso-sw-bot', label: 'BL', title: 'Isometric Bottom-Left', style: 'bottom:-10px;left:-10px;', preset: 'isoSW' },
+        ];
+        for (const cp of cornerSpecs) {
+            const corner = document.createElement('button');
+            corner.type = 'button';
+            corner.id = cp.id;
+            corner.title = cp.title;
+            corner.textContent = cp.label;
+            corner.style.cssText = `
+                position:absolute;${cp.style}width:28px;height:28px;
+                border-radius:50%;border:1px solid #ffffff77;
+                background:#101522dd;color:#fff;font-size:10px;font-weight:700;
+                display:flex;align-items:center;justify-content:center;
+                cursor:pointer;z-index:20;pointer-events:auto;box-shadow:0 2px 6px rgba(0,0,0,0.35);
+            `;
+            corner.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.snapToPreset(cp.preset);
+            });
+            corner.addEventListener('mouseenter', () => {
+                corner.style.background = '#20314ecc';
+                corner.style.borderColor = '#ffffffcc';
+            });
+            corner.addEventListener('mouseleave', () => {
+                corner.style.background = '#101522dd';
+                corner.style.borderColor = '#ffffff77';
+            });
+            cube.appendChild(corner);
+        }
+        this._viewCubeInner = inner;
+        this._viewCubeEl = cube;
+        // Ensure container is positioned
+        if (getComputedStyle(this.container).position === 'static') {
+            this.container.style.position = 'relative';
+        }
+        this.container.appendChild(cube);
+    }
+
+    /** Re-centre camera on geometry — public, called by UI Centre button */
+    fitCamera() { this._fitCamera(); }
+    fitAll() { this._fitCamera(); }
+
+    fitSelection() {
+        if (!this._selectedComponentId) {
+            this._fitCamera();
+            return;
+        }
+        const meshes = this._componentMeshIndex.get(this._selectedComponentId) || [];
+        const box = new THREE.Box3();
+        for (const mesh of meshes) box.expandByObject(mesh);
+        if (box.isEmpty()) {
+            this._fitCamera();
+            return;
+        }
+        const centre = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z, 1);
+        this.camera.position.set(centre.x + maxDim, centre.y + maxDim, centre.z + maxDim);
+        this.camera.lookAt(centre);
+        this.controls.target.copy(centre);
+        this.controls.update();
+        this._emitTrace('fit-selection', { componentId: this._selectedComponentId });
+    }
+
+    measureSelection() {
+        if (!this._selectedComponentId) {
+            this._reportMeasurement(null);
+            return null;
+        }
+        const meshes = this._componentMeshIndex.get(this._selectedComponentId) || [];
+        if (!meshes.length) {
+            this._reportMeasurement(null);
+            return null;
+        }
+        const group = new THREE.Group();
+        for (const mesh of meshes) group.add(mesh.clone());
+        const measurement = computeBoundingMeasurement(group);
+        const summary = {
+            componentId: this._selectedComponentId,
+            width: Number(measurement.width || 0),
+            height: Number(measurement.height || 0),
+            depth: Number(measurement.depth || 0),
+            diagonal: Number(measurement.diagonal || 0),
+        };
+        this._reportMeasurement(summary);
+        this._emitTrace('measure-selection', summary);
+        return summary;
+    }
+
+    _reportMeasurement(summary) {
+        this._lastMeasurement = summary || null;
+        if (this._onMeasurementChange) this._onMeasurementChange(this._lastMeasurement);
+    }
+
+    setNavMode(mode = 'orbit') {
+        const normalized = String(mode || 'orbit');
+        if (!this.controls) return;
+        this._navMode = normalized;
+        if (normalized === 'select') {
+            this.controls.enableRotate = false;
+            this.controls.enablePan = false;
+            this.controls.enableZoom = true;
+        } else if (normalized === 'measure') {
+            this.controls.enableRotate = false;
+            this.controls.enablePan = false;
+            this.controls.enableZoom = true;
+        } else if (normalized === 'plan') {
+            this.controls.enableRotate = true;
+            this.controls.enablePan = true;
+            this.controls.enableZoom = true;
+            this.snapToPreset('plan');
+        } else if (normalized === 'rotateY') {
+            this.controls.enableRotate = true;
+            this.controls.enablePan = true;
+            this.controls.enableZoom = true;
+            this._orbitAroundAxis('Y');
+        } else if (normalized === 'rotateZ') {
+            this.controls.enableRotate = true;
+            this.controls.enablePan = true;
+            this.controls.enableZoom = true;
+            this._orbitAroundAxis('Z');
+        } else if (normalized === 'pan') {
+            this.controls.enableRotate = false;
+            this.controls.enablePan = true;
+            this.controls.enableZoom = true;
+        } else {
+            this.controls.enableRotate = true;
+            this.controls.enablePan = true;
+            this.controls.enableZoom = true;
+        }
+        this._emitTrace('nav-mode', { mode: normalized });
+    }
+
+    getNavMode() {
+        return this._navMode;
+    }
+
+    toggleProjection() {
+        this._projectionMode = this._projectionMode === 'orthographic' ? 'perspective' : 'orthographic';
+        const next = this._projectionMode === 'perspective' ? this._perspCamera : this._orthoCamera;
+        if (next && this.camera) {
+            next.position.copy(this.camera.position);
+            next.up.copy(this.camera.up);
+            if (this.controls) {
+                next.lookAt(this.controls.target);
+                this.controls.object = next;
+            }
+            this.camera = next;
+            this.camera.updateProjectionMatrix();
+        }
+        this._emitTrace('projection-toggle', { mode: this._projectionMode });
+    }
+
+    snapToPreset(presetId = 'isoNE') {
+        if (String(presetId).toLowerCase() === 'plan') {
+            const up = CURRENT_VERTICAL_AXIS === 'Z' ? [0, 1, 0] : [0, 0, -1];
+            this._snapCamera([0, 1, 0], up);
+            this._emitTrace('snap-preset', { preset: 'plan' });
+            return;
+        }
+        const preset = this.viewerConfig?.presets?.[presetId];
+        if (!preset) return;
+        this._snapCamera(preset.cam || [1, 1, -1], preset.up || [0, 1, 0]);
+        this._emitTrace('snap-preset', { preset: presetId });
+    }
+
+    _orbitAroundAxis(axis) {
+        if (!this.controls || !this.camera) return;
+        const box = new THREE.Box3();
+        if (this._componentGroup) box.setFromObject(this._componentGroup);
+        const centre = box.isEmpty() ? this.controls.target.clone() : box.getCenter(new THREE.Vector3());
+        const offset = this.camera.position.clone().sub(this.controls.target);
+        const radius = Math.max(offset.length(), 1);
+        const nextOffset = axis === 'Y'
+            ? new THREE.Vector3(radius, radius * 0.35, 0)
+            : new THREE.Vector3(radius * 0.35, 0, radius);
+        this.camera.position.copy(centre.clone().add(nextOffset));
+        this.controls.target.copy(centre);
+        this.camera.lookAt(centre);
+        this.controls.update();
+        this._emitTrace('camera-orbit-axis', { axis });
+    }
+
+    /** @private — Snap camera to axis-aligned view */
+    _snapCamera([cx, cy, cz], [ux, uy, uz]) {
+        if (!this.controls) return;
+        const box = new THREE.Box3();
+        if (this._componentGroup) box.setFromObject(this._componentGroup);
+        const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
+        const size = box.isEmpty() ? 5000 : Math.max(...box.getSize(new THREE.Vector3()).toArray()) * 1.5;
+        this.camera.position.set(
+            centre.x + cx * size,
+            centre.y + cy * size,
+            centre.z + cz * size
+        );
+        this.camera.up.set(ux, uy, uz);
+        this.camera.lookAt(centre);
+        this.camera.updateProjectionMatrix();
+        this.controls.target.copy(centre);
+        this.controls.update();
+        this._emitTrace('camera-snap', { cx, cy, cz, ux, uy, uz });
+    }
+
+    /** @private — Sync ViewCube rotation with camera */
+    _syncViewCube() {
+        if (!this._viewCubeInner || !this.camera) return;
+        const q = this.camera.quaternion.clone();
+        if ((this.viewerConfig?.coordinateMap?.axisConvention || 'Z-up') === 'Z-up') {
+            const rootQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+            q.premultiply(rootQ.clone().invert());
+        }
+        const mat = new THREE.Matrix4().makeRotationFromQuaternion(q.clone().invert());
+        this._viewCubeInner.style.transform = `matrix3d(${mat.elements.join(',')})`;
+    }
+
+    /** @private — Build axis gizmo in bottom-right */
+    _buildAxisGizmo() {
+        const container = document.createElement('div');
+        container.id = 'pcf-axis-gizmo';
+        const pos = this.viewerConfig?.helpers?.axisGizmoPosition || 'bottom-right';
+        const posStyles = {
+            'top-left': 'top:12px;left:12px;',
+            'top-right': 'top:12px;right:12px;',
+            'bottom-left': 'bottom:12px;left:12px;',
+            'bottom-right': 'bottom:12px;right:12px;',
+        }[pos] || 'bottom:12px;right:12px;';
+        container.style.cssText = `
+            position:absolute;${posStyles}width:${Number(this.viewerConfig?.helpers?.axisGizmoSize || 80)}px;height:${Number(this.viewerConfig?.helpers?.axisGizmoSize || 80)}px;
+            z-index:10;pointer-events:none;
+        `;
+        const canvas = document.createElement('canvas');
+        const gizmoSize = Number(this.viewerConfig?.helpers?.axisGizmoSize || 80);
+        canvas.width = gizmoSize;
+        canvas.height = gizmoSize;
+        container.appendChild(canvas);
+        this.container.appendChild(container);
+        this._axisGizmoEl = container;
+        this._axisGizmoCtx = canvas.getContext('2d');
+    }
+
+    /** @private — Redraw axis gizmo every frame */
+    _syncAxisGizmo() {
+        const ctx = this._axisGizmoCtx;
+        if (!ctx || !this.camera) return;
+        const W = ctx.canvas.width, H = ctx.canvas.height, cx = W / 2, cy = H / 2, len = Math.round(Math.min(W, H) * 0.35);
+        ctx.clearRect(0, 0, W, H);
+        const axes = [
+            { src: { x: 1, y: 0, z: 0 }, color: '#ff4444', label: 'X' },
+            { src: { x: 0, y: 1, z: 0 }, color: '#44cc44', label: 'Y' },
+            { src: { x: 0, y: 0, z: 1 }, color: '#4488ff', label: 'Z' },
+        ];
+        for (const { src, color, label } of axes) {
+            const dir = mapCoord(src);
+            if (!dir) continue;
+            const proj = dir.clone().applyQuaternion(this.camera.quaternion);
+            const ex = cx + proj.x * len;
+            const ey = cy - proj.y * len;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(ex, ey);
+            ctx.stroke();
+            ctx.fillStyle = color;
+            ctx.font = 'bold 10px sans-serif';
+            ctx.fillText(label, ex + (ex > cx ? 2 : -10), ey + (ey > cy ? 10 : -2));
+        }
+    }
+
+
+    /** @private */
+    _wireFullscreen() {
+        // Fullscreen is now handled by viewer-tab.js — kept for backward compatibility
+    }
+
+    /**
+     * Clear old components and render new ones.
+     * @param {object[]} components — from stitcher output
+     */
+    render(components) {
+        this._emitTrace('render-start', { components: Array.isArray(components) ? components.length : 0 });
+        // Remove old component group
+        if (this._componentGroup) {
+            this.scene.remove(this._componentGroup);
+            this._componentGroup.traverse(obj => {
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) obj.material.dispose();
+            });
+        }
+        if (this._sectionVisual) {
+            this.scene.remove(this._sectionVisual);
+            this._sectionVisual = null;
+        }
+
+        this._componentGroup = new THREE.Group();
+        this._lastComponentsCache = components; // Cache for radius fallback references
+        this._componentMeshIndex = new Map();
+        this._clearSelection();
+        this._reportMeasurement(null);
+
+        if (this._legendLabelGroup) {
+            this.scene.remove(this._legendLabelGroup);
+            this._legendLabelGroup = null;
+        }
+
+        for (const comp of components) {
+            const meshes = this._buildComponent(comp);
+            const visibleMeshes = meshes.filter(Boolean);
+            if (!visibleMeshes.length) continue;
+            const componentId = comp.id || `${String(comp.type || 'UNKNOWN').toUpperCase()}-${this._componentMeshIndex.size + 1}`;
+            this._componentMeshIndex.set(componentId, visibleMeshes);
+            visibleMeshes.forEach((m) => {
+                m.userData = {
+                    ...m.userData,
+                    ...comp,
+                    componentId,
+                };
+                this._componentGroup.add(m);
+            });
+        }
+
+        this.scene.add(this._componentGroup);
+        this._applyCurrentSectionClipping();
+        if (this._onSelectionChange) this._onSelectionChange(null);
+        this._rebuildLegendLabels(components);
+        this._renderHeatmapPanel();
+
+        // Auto-fit camera if components exist
+        if (components.length > 0) this._fitCamera();
+        this._emitTrace('render-complete', { rendered: this._componentMeshIndex.size });
+    }
+
+    /** @private */
+    _buildComponent(comp) {
+        const { type, points, centrePoint, branch1Point, bore, coOrds } = comp;
+        const radius = (bore || 50) / 2;
+        const color = this._palette[type] ?? this._palette.UNKNOWN;
+
+        let meshes = [];
+
+        switch (type) {
+            case 'PIPE':
+                meshes = this._buildPipe(points, radius, color);
+                break;
+            case 'ELBOW':
+            case 'BEND':
+                meshes = this._buildElbow(points, centrePoint, radius, color);
+                break;
+            case 'TEE':
+                meshes = this._buildTee(points, centrePoint, branch1Point, radius, color);
+                break;
+            case 'SUPPORT':
+            case 'ANCI': {
+                const pt = coOrds || (points && points[0]);
+                if (pt) {
+                    const pos = mapCoord(pt);
+
+                    // Critical Fix: Supports often have bore=0 in PCF. 
+                    // This causes radius=25, which hides the support *inside* a large pipe (e.g., bore=400).
+                    // We must inherit a realistic radius so the support geometry wraps outside the pipe.
+                    let supportRadius = radius;
+                    if (bore === 0 || !bore) {
+                        let maxR = 25;
+                        if (this._lastComponentsCache) {
+                            for (const c of this._lastComponentsCache) {
+                                if (c.bore && c.bore > maxR * 2) maxR = c.bore / 2;
+                            }
+                        }
+                        supportRadius = maxR;
+                    }
+                    meshes = this._buildSupport(pos, supportRadius, comp);
+                }
+                break;
+            }
+            case 'FLANGE':
+                meshes = this._buildFlange(points, radius, color);
+                break;
+            case 'VALVE':
+                meshes = this._buildValve(points, radius, color);
+                break;
+            default:
+                meshes = this._buildGeneric(points, radius, color, type);
+        }
+
+        return meshes;
+    }
+
+    /** @private */
+    _buildPipe(points, radius, color) {
+        if (!points || points.length < 2) return [];
+        const s = mapCoord(points[0]);
+        const e = mapCoord(points[1]);
+        const cyl = createCylinder(s, e, radius, color);
+        return cyl ? [cyl] : [];
+    }
+
+    /** @private */
+    _buildElbow(points, centrePoint, radius, color) {
+        if (!points || points.length < 2) return [];
+        const p1 = mapCoord(points[0]);
+        const p2 = mapCoord(points[1]);
+        const c = centrePoint ? mapCoord(centrePoint) : null;
+        if (!c) {
+            console.warn(`[Viewer3D] System Log: Centre point missing for ELBOW/BEND between ${p1.x},${p1.y},${p1.z} and ${p2.x},${p2.y},${p2.z}`);
+            const cyl = createCylinder(p1, p2, radius, color);
+            return cyl ? [cyl] : [];
+        }
+        const v1 = p1.clone().sub(c);
+        const v2 = p2.clone().sub(c);
+        if (v1.length() < 0.1 || v2.length() < 0.1) {
+            const cyl = createCylinder(p1, p2, radius, color);
+            return cyl ? [cyl] : [];
+        }
+        const d1 = v1.clone().normalize();
+        const d2 = v2.clone().normalize();
+        const dot = THREE.MathUtils.clamp(d1.dot(d2), -1, 1);
+        const angle = Math.acos(dot);
+
+        // Degenerate or almost straight/opposed geometry: render as a straight run.
+        if (angle < 0.05 || Math.abs(Math.PI - angle) < 0.05) {
+            const cyl = createCylinder(p1, p2, radius, color);
+            return cyl ? [cyl] : [];
+        }
+
+        const normal = new THREE.Vector3().crossVectors(d1, d2);
+        if (normal.length() < 1e-4) {
+            const cyl = createCylinder(p1, p2, radius, color);
+            return cyl ? [cyl] : [];
+        }
+        normal.normalize();
+
+        const arcRadius = Math.min(v1.length(), v2.length());
+        const arcStart = c.clone().addScaledVector(d1, arcRadius);
+        const arcEnd = c.clone().addScaledVector(d2, arcRadius);
+
+        const steps = Math.max(12, Math.ceil(angle / (Math.PI / 36)));
+        const quat = new THREE.Quaternion();
+        const arcPts = [];
+        for (let i = 0; i <= steps; i += 1) {
+            const t = i / steps;
+            quat.setFromAxisAngle(normal, angle * t);
+            const dir = d1.clone().applyQuaternion(quat);
+            arcPts.push(c.clone().addScaledVector(dir, arcRadius));
+        }
+
+        const straight1 = p1.distanceTo(arcStart) > 0.1 ? createCylinder(p1, arcStart, radius, color) : null;
+        const straight2 = arcEnd.distanceTo(p2) > 0.1 ? createCylinder(arcEnd, p2, radius, color) : null;
+        const bendCurve = new THREE.CatmullRomCurve3(arcPts, false, 'centripetal');
+        const bend = createTubeFromCurve(bendCurve, radius, color, Math.max(24, steps * 2), 16);
+
+        return [straight1, bend, straight2].filter(Boolean);
+    }
+
+    /** @private */
+    _buildTee(points, centrePoint, branch1Point, radius, color) {
+        if (!centrePoint) return this._buildGeneric(points, radius, color, 'TEE');
+        const c = mapCoord(centrePoint);
+        const meshes = [];
+
+        if (points && points[0]) {
+            const p1 = mapCoord(points[0]);
+            const leg = createCylinder(p1, c, radius, color);
+            if (leg) meshes.push(leg);
+        }
+        if (points && points[1]) {
+            const p2 = mapCoord(points[1]);
+            const leg = createCylinder(c, p2, radius, color);
+            if (leg) meshes.push(leg);
+        }
+        if (branch1Point) {
+            const b = mapCoord(branch1Point);
+            const leg = createCylinder(c, b, radius * 0.8, color);
+            if (leg) meshes.push(leg);
+        }
+
+        // Sphere at junction
+        meshes.push(createSphere(c, radius * 1.2, color));
+        return meshes;
+    }
+
+    /** @private — Flange: two thick discs + thin web between EP1 and EP2 */
+    _buildFlange(points, radius, color) {
+        if (!points || points.length < 2) return [];
+        const s = mapCoord(points[0]);
+        const e = mapCoord(points[1]);
+        const diff = new THREE.Vector3().subVectors(e, s);
+        const len = diff.length();
+        if (len < 0.1) return [];
+        const normal = diff.clone().normalize();
+        const discR = radius * 2.0;    // flange rim wider than pipe
+        // Disc thickness: fixed visual size (half-bore), capped so discs never exceed 40% of span.
+        // This prevents stretched-disc artefacts when EP1→EP2 span is large (e.g. pass-0 raw data).
+        const discT = Math.min(radius * 0.5, len * 0.4);
+        const webT  = Math.max(len - discT * 2, radius * 0.1); // web fills remaining gap
+        const mid = new THREE.Vector3().addVectors(s, e).multiplyScalar(0.5);
+        const q1 = s.clone().lerp(mid, 0.15);
+        const q2 = e.clone().lerp(mid, 0.15);
+        const meshes = [
+            createDisc(q1, normal, discR, discT, color),
+            createDisc(q2, normal, discR, discT, color),
+            createCylinder(q1, q2, radius * 0.85, 0xaaaaaa),  // web (lighter)
+        ];
+        return meshes.filter(Boolean);
+    }
+
+    /** @private — Valve: two flanges + central sphere (ball valve silhouette) */
+    _buildValve(points, radius, color) {
+        if (!points || points.length < 2) return [];
+        const s = mapCoord(points[0]);
+        const e = mapCoord(points[1]);
+        const mid = new THREE.Vector3().addVectors(s, e).multiplyScalar(0.5);
+        const normal = new THREE.Vector3().subVectors(e, s).normalize();
+        const fColor = COLORS.FLANGE;
+        const discR = radius * 1.8;
+        const discT = radius * 0.5;
+        const q1 = s.clone().lerp(mid, 0.25);
+        const q2 = e.clone().lerp(mid, 0.25);
+        return [
+            createDisc(q1, normal, discR, discT, fColor),
+            createDisc(q2, normal, discR, discT, fColor),
+            createSphere(mid, radius * 1.5, color),   // ball body
+            createCylinder(q1, q2, radius * 0.7, 0xaaaaaa), // body tube
+        ].filter(Boolean);
+    }
+
+    /** @private — Support graphic based on subtype */
+    _buildSupport(pos, radius, comp) {
+        const r = radius;
+        const color = this._palette.SUPPORT;
+        const anchorColor = this._palette.ANCI;
+        const supportMat = _supportMaterial(color);
+        const anchorMat = _supportMaterial(anchorColor);
+        const up = new THREE.Vector3(0, 1, 0);
+        const nameRaw = String(
+            comp.attributes?.SUPPORT_TAG ||
+            comp.attributes?.SKEY ||
+            comp.attributes?.SUPPORT_NAME ||
+            comp.attributes?.['<SUPPORT_NAME>'] ||
+            comp.attributes?.['COMPONENT-ATTRIBUTE1'] ||
+            comp.attributes?.['COMPONENT-ATTRIBUTE2'] ||
+            ''
+        ).toUpperCase();
+
+        const declaredKind = _supportKindFromToken(comp.attributes?.SUPPORT_KIND || '');
+        let supportKind = declaredKind || _supportKindFromText(nameRaw);
+        const explicitRest = /\bRST\b|\bREST\b|\+Y\s*(SUPPORT|RESTRAINT)\b|\bY\s*(SUPPORT|RESTRAINT)\b|\+Y\b/.test(nameRaw);
+        const supportDofs = _dofsFromText(comp.attributes?.SUPPORT_DOFS || '');
+        const dofSet = new Set(supportDofs);
+        const dofRest = dofSet.size === 1 && dofSet.has(2);
+        const dofAnchor = dofSet.size >= 6;
+        const dofGuide = dofSet.size > 0 && [...dofSet].every(v => v === 1 || v === 3);
+        const axisSemanticKind = _semanticSupportKindFromAxisCosinesText(comp.attributes?.AXIS_COSINES || '');
+        if (dofAnchor) supportKind = 'ANCHOR';
+        else if (dofRest) supportKind = 'REST';
+        else if (dofGuide && supportKind === 'UNKNOWN') supportKind = 'GUIDE';
+        else if (axisSemanticKind === 'REST' && supportKind !== 'ANCHOR') supportKind = 'REST';
+        else if (axisSemanticKind === 'GUIDE' && supportKind === 'UNKNOWN') supportKind = 'GUIDE';
+        if (explicitRest && supportKind !== 'ANCHOR') supportKind = 'REST';
+        const isFixed = supportKind === 'ANCHOR';
+        const supportAxis = _axisFromCosinesText(comp.attributes?.AXIS_COSINES || '');
+        const pipeAxis = _axisFromCosinesText(comp.attributes?.PIPE_AXIS_COSINES || '');
+
+    if (supportAxis && !isFixed) {
+            const verticalness = Math.abs(supportAxis.dot(up));
+            // Keep explicit REST/+Y supports vertical; axis-cosines in upstream data
+            // may represent restraint DOF orientation, not the visual support arrow.
+            if (supportKind === 'REST' || supportKind === 'SPRING') {
+                // no-op
+            } else if (verticalness > 0.75) {
+                if (supportKind === 'GUIDE' || supportKind === 'STOP') return [];
+                if (supportKind === 'UNKNOWN') supportKind = 'REST';
+            } else if (verticalness < 0.35) {
+                supportKind = 'GUIDE';
+            } else {
+                return [];
+            }
+    } else if (supportKind === 'UNKNOWN') {
+        return [];
+    }
+
+        if (supportKind === 'RIGID') supportKind = 'ANCHOR';
+        const frame = _buildSupportFrame(pipeAxis, supportAxis);
+        const lateralAxis = frame.lateral;
+        const verticalAxis = frame.vertical;
+        const pipeDir = frame.pipe;
+        const gravityOnPipe = verticalAxis.clone().negate().projectOnPlane(pipeDir);
+        const bottomDir = gravityOnPipe.length() >= 0.01
+            ? gravityOnPipe.normalize()
+            : verticalAxis.clone().negate();
+        const sideNudge = lateralAxis ? lateralAxis.clone().multiplyScalar(r * 0.18) : new THREE.Vector3();
+        const bottomTip = bottomDir.clone().multiplyScalar(r * 1.02).add(sideNudge);
+        const bottomStart = bottomDir.clone().multiplyScalar(r * 2.1).add(sideNudge);
+        const verticalTip = verticalAxis.clone().multiplyScalar(-r * 1.02);
+        const verticalStart = verticalAxis.clone().multiplyScalar(-r * 2.1);
+
+        if (supportKind === 'ANCHOR') {
+            const plateSize = r * 1.7;
+            const thickness = Math.max(r * 0.24, 0.08 * r);
+            const plate = new THREE.Mesh(new THREE.BoxGeometry(plateSize, plateSize, thickness), anchorMat);
+            plate.position.copy(verticalAxis).multiplyScalar(-r * 0.1);
+            const normal = supportAxis && supportAxis.length() >= 0.01 ? supportAxis.clone().normalize() : verticalAxis;
+            plate.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+            return [createSupportAssembly(pos, [plate])];
+        }
+
+        if (supportKind === 'GUIDE') {
+            if (!lateralAxis) return [];
+            const lateral = lateralAxis.clone().normalize();
+            return [createSupportAssembly(pos, [
+                createArrowBetween(
+                    lateral.clone().multiplyScalar(r * 2.0),
+                    lateral.clone().multiplyScalar(r * 1.02),
+                    color,
+                    supportMat,
+                    r
+                ),
+                createArrowBetween(
+                    lateral.clone().multiplyScalar(-r * 2.0),
+                    lateral.clone().multiplyScalar(-r * 1.02),
+                    color,
+                    supportMat,
+                    r
+                ),
+                createArrowBetween(bottomStart, bottomTip, color, supportMat, r),
+            ].filter(Boolean))];
+        }
+
+        if (supportKind === 'REST') {
+            return [createSupportAssembly(pos, [
+                createArrowBetween(verticalStart, verticalTip, color, supportMat, r),
+            ].filter(Boolean))];
+        }
+
+        if (supportKind === 'SPRING') {
+            const headLen = 0.4 * r;
+
+            const pts = [];
+            pts.push(verticalStart.clone());
+            pts.push(verticalTip.clone().addScaledVector(verticalAxis, -headLen));
+            const geo = new THREE.BufferGeometry().setFromPoints(pts);
+            const line = new THREE.Line(geo, new THREE.LineDashedMaterial({
+                color,
+                linewidth: 2,
+                scale: 1,
+                dashSize: 3,
+                gapSize: 3,
+            }));
+            line.computeLineDistances();
+            const head = new THREE.Mesh(new THREE.ConeGeometry(0.175 * r, headLen, 8), supportMat);
+            head.position.copy(verticalTip).addScaledVector(verticalAxis, -headLen / 2);
+            head.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), verticalAxis.clone().normalize());
+            return [createSupportAssembly(pos, [line, head])];
+        }
+
+        if (supportKind === 'STOP') {
+            if (!lateralAxis) return [];
+            const lateral = lateralAxis.clone().normalize();
+            return [createSupportAssembly(pos, [
+                createArrowBetween(
+                    lateral.clone().multiplyScalar(r * 2.0),
+                    lateral.clone().multiplyScalar(r * 1.02),
+                    color,
+                    supportMat,
+                    r
+                ),
+                createArrowBetween(
+                    lateral.clone().multiplyScalar(-r * 2.0),
+                    lateral.clone().multiplyScalar(-r * 1.02),
+                    color,
+                    supportMat,
+                    r
+                ),
+            ].filter(Boolean))];
+        }
+
+        return [];
+    }
+
+    /** @private */
+    _buildGeneric(points, radius, color, type) {
+        if (!points || points.length < 2) return [];
+        const s = mapCoord(points[0]);
+        const e = mapCoord(points[1]);
+        const r = radius;
+        const cyl = createCylinder(s, e, r, color);
+        return cyl ? [cyl] : [];
+    }
+
+    /** @private — auto-fit camera to scene bounds */
+    _fitCamera() {
+        const box = new THREE.Box3().setFromObject(this._componentGroup);
+        if (box.isEmpty()) return;
+
+        const centre = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+
+        // Update orthographic frustum
+        const aspect = this.container.clientWidth / (this.container.clientHeight || 1);
+        const fitPadding = Number(this.viewerConfig?.camera?.fitPadding || 0.8);
+        const half = maxDim * fitPadding;
+        this._orthoCamera.left = -half * aspect;
+        this._orthoCamera.right = half * aspect;
+        this._orthoCamera.top = half;
+        this._orthoCamera.bottom = -half;
+        this._orthoCamera.near = -maxDim * 20;
+        this._orthoCamera.far = maxDim * 20;
+
+        const dist = maxDim * 1.5;
+        this._orthoCamera.position.set(
+            centre.x + dist,
+            centre.y + dist,
+            centre.z + dist
+        );
+        this._orthoCamera.lookAt(centre);
+        this._orthoCamera.updateProjectionMatrix();
+
+        this._perspCamera.near = 1;
+        this._perspCamera.far = maxDim * 50;
+        this._perspCamera.position.set(
+            centre.x + dist,
+            centre.y + dist,
+            centre.z + dist
+        );
+        this._perspCamera.lookAt(centre);
+        this._perspCamera.updateProjectionMatrix();
+
+        if (this._projectionMode === 'perspective') {
+            this.camera = this._perspCamera;
+        } else {
+            this.camera = this._orthoCamera;
+        }
+
+        if (this.controls) {
+            this.controls.object = this.camera;
+            this.controls.target.copy(centre);
+            this.controls.update();
+        }
+        this._emitTrace('fit-all', { maxDim });
+    }
+
+    _bindInteractions() {
+        this._onPointerDown = (event) => {
+            if (!this._componentGroup || !this.camera || !this.renderer) return;
+            const rect = this.renderer.domElement.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+            this._pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            this._pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            this._raycaster.setFromCamera(this._pointer, this.camera);
+            const hits = this._raycaster.intersectObjects(this._componentGroup.children, false);
+            const hit = hits.find((entry) => entry.object?.userData?.componentId);
+            if (!hit) {
+                if (this._navMode === 'measure') this._reportMeasurement(null);
+                return;
+            }
+            this._selectComponent(hit.object.userData.componentId);
+            if (this._navMode === 'measure') this.measureSelection();
+            this._emitTrace('pointer-select', { componentId: hit.object?.userData?.componentId || null });
+        };
+        this.renderer.domElement.addEventListener('pointerdown', this._onPointerDown);
+    }
+
+    _clearSelection() {
+        if (!this._selectedOriginalMaterials.length) {
+            this._selectedComponentId = null;
+            return;
+        }
+        for (const entry of this._selectedOriginalMaterials) {
+            const current = entry.mesh?.material;
+            if (Array.isArray(current)) current.forEach((m) => m?.dispose?.());
+            else current?.dispose?.();
+            if (entry.mesh) entry.mesh.material = entry.material;
+        }
+        this._selectedOriginalMaterials = [];
+        this._selectedComponentId = null;
+    }
+
+    _selectComponent(componentId) {
+        if (!componentId || this._selectedComponentId === componentId) return;
+        this._clearSelection();
+        const meshes = this._componentMeshIndex.get(componentId);
+        if (!meshes?.length) return;
+        this._selectedComponentId = componentId;
+        for (const mesh of meshes) {
+            const originalMaterial = mesh.material;
+            const selectedMaterial = Array.isArray(originalMaterial)
+                ? originalMaterial.map((m) => this._makeSelectedMaterial(m))
+                : this._makeSelectedMaterial(originalMaterial);
+            this._selectedOriginalMaterials.push({ mesh, material: originalMaterial });
+            mesh.material = selectedMaterial;
+        }
+        const box = new THREE.Box3();
+        meshes.forEach((mesh) => box.expandByObject(mesh));
+        const selected = meshes[0]?.userData || null;
+        if (this._onSelectionChange) this._onSelectionChange(selected);
+        if (this._navMode !== 'measure') this._reportMeasurement(null);
+        this._emitTrace('selection-change', { componentId, componentType: selected?.type || null });
+    }
+
+    _makeSelectedMaterial(material) {
+        if (!material?.clone) return material;
+        const next = material.clone();
+        if ('emissive' in next && next.emissive) {
+            next.emissive = new THREE.Color(0x5dade2);
+            next.emissiveIntensity = 0.45;
+        }
+        if ('color' in next && next.color) {
+            next.color = next.color.clone().lerp(new THREE.Color(0xffffff), 0.18);
+        }
+        return next;
+    }
+
+    _resolvePalette() {
+        const palette = { ...COLORS };
+        const cfgPalette = this.viewerConfig?.palette || {};
+        for (const [k, v] of Object.entries(cfgPalette)) {
+            if (typeof v === 'number') {
+                palette[k.toUpperCase()] = v;
+                continue;
+            }
+            const text = String(v || '').trim();
+            if (/^#[0-9a-fA-F]{6}$/.test(text)) {
+                palette[k.toUpperCase()] = Number.parseInt(text.slice(1), 16);
+            }
+        }
+        return palette;
+    }
+
+    _emitTrace(type, payload = {}) {
+        if (typeof this._onTrace === 'function') {
+            this._onTrace({ type, category: 'viewer3d', payload });
+        }
+    }
+
+    setSectionMode(mode = 'OFF') {
+        const normalized = String(mode || 'OFF').toUpperCase();
+        this._sectionMode = normalized;
+        this._removeSectionVisual();
+        if (normalized === 'BOX') {
+            this._buildBoxSectionPlanes();
+        } else if (normalized === 'PLANE_UP') {
+            this._buildPlaneUpSection();
+        } else {
+            this._clipPlanes = [];
+        }
+        this._applyCurrentSectionClipping();
+        this._emitTrace('section-mode', { mode: normalized });
+    }
+
+    disableSection() {
+        this._sectionMode = 'OFF';
+        this._clipPlanes = [];
+        this._removeSectionVisual();
+        this._applyCurrentSectionClipping();
+        this._emitTrace('section-disable', {});
+    }
+
+    _buildBoxSectionPlanes() {
+        if (!this._componentGroup) return;
+        const box = new THREE.Box3().setFromObject(this._componentGroup);
+        if (box.isEmpty()) return;
+        this._sectionBounds = box.clone();
+        this._applyBoxPlanes(box);
+        this._renderSectionBoxVisual(box);
+    }
+
+    _buildPlaneUpSection() {
+        if (!this._componentGroup) return;
+        const box = new THREE.Box3().setFromObject(this._componentGroup);
+        if (box.isEmpty()) return;
+        this._sectionBounds = box.clone();
+        const cut = CURRENT_VERTICAL_AXIS === 'Z'
+            ? box.getCenter(new THREE.Vector3()).z
+            : box.getCenter(new THREE.Vector3()).y;
+        const normal = CURRENT_VERTICAL_AXIS === 'Z'
+            ? new THREE.Vector3(0, 0, -1)
+            : new THREE.Vector3(0, -1, 0);
+        this._clipPlanes = [new THREE.Plane(normal, cut)];
+        this._renderSectionPlaneVisual(normal, cut, box);
+    }
+
+    _applyBoxPlanes(box) {
+        const min = box.min;
+        const max = box.max;
+        this._clipPlanes = [
+            new THREE.Plane(new THREE.Vector3(1, 0, 0), -min.x),
+            new THREE.Plane(new THREE.Vector3(-1, 0, 0), max.x),
+            new THREE.Plane(new THREE.Vector3(0, 1, 0), -min.y),
+            new THREE.Plane(new THREE.Vector3(0, -1, 0), max.y),
+            new THREE.Plane(new THREE.Vector3(0, 0, 1), -min.z),
+            new THREE.Plane(new THREE.Vector3(0, 0, -1), max.z),
+        ];
+        this._applyCurrentSectionClipping();
+    }
+
+    _applyCurrentSectionClipping() {
+        if (!this._componentGroup || !this.renderer) return;
+        const enabled = this._sectionMode !== 'OFF' && this._clipPlanes.length > 0;
+        this.renderer.localClippingEnabled = enabled;
+        this._componentGroup.traverse((obj) => {
+            if (!obj?.material) return;
+            const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+            for (const m of materials) {
+                m.clippingPlanes = enabled ? this._clipPlanes : null;
+                m.clipIntersection = this.viewerConfig?.supportGeometry?.clipIntersection === true;
+                m.needsUpdate = true;
+            }
+        });
+    }
+
+    _removeSectionVisual() {
+        if (this._sectionVisual) {
+            this.scene.remove(this._sectionVisual);
+            this._sectionVisual = null;
+        }
+    }
+
+    getSectionBounds() {
+        return this._sectionBounds ? this._sectionBounds.clone() : null;
+    }
+
+    setSectionBoxPadding(padding = 0) {
+        if (this._sectionMode !== 'BOX' || !this._sectionBounds) this.setSectionMode('BOX');
+        if (!this._sectionBounds) return;
+        const box = this._sectionBounds.clone();
+        box.expandByScalar(Number(padding) || 0);
+        this._applyBoxPlanes(box);
+        this._renderSectionBoxVisual(box);
+        this._emitTrace('section-box-adjust', { padding: Number(padding) || 0 });
+    }
+
+    setSectionPlaneOffset(offset = 0) {
+        if (this._sectionMode !== 'PLANE_UP' || !this._sectionBounds) this.setSectionMode('PLANE_UP');
+        if (!this._sectionBounds) return;
+        const centre = this._sectionBounds.getCenter(new THREE.Vector3());
+        const cut = CURRENT_VERTICAL_AXIS === 'Z'
+            ? centre.z + Number(offset || 0)
+            : centre.y + Number(offset || 0);
+        const normal = CURRENT_VERTICAL_AXIS === 'Z'
+            ? new THREE.Vector3(0, 0, -1)
+            : new THREE.Vector3(0, -1, 0);
+        this._clipPlanes = [new THREE.Plane(normal, cut)];
+        this._renderSectionPlaneVisual(normal, cut, this._sectionBounds);
+        this._applyCurrentSectionClipping();
+        this._emitTrace('section-plane-adjust', { offset: Number(offset) || 0 });
+    }
+
+    _renderSectionBoxVisual(box) {
+        this._removeSectionVisual();
+        const helper = new THREE.Box3Helper(box, new THREE.Color(0xffa500));
+        helper.material.depthTest = false;
+        helper.material.transparent = true;
+        helper.material.opacity = 0.35;
+        this._sectionVisual = helper;
+        this.scene.add(helper);
+    }
+
+    _renderSectionPlaneVisual(normal, constant, box) {
+        this._removeSectionVisual();
+        const size = Math.max(box.getSize(new THREE.Vector3()).length(), 1000);
+        const plane = new THREE.Plane(normal.clone().normalize(), constant);
+        const geometry = new THREE.PlaneGeometry(size, size);
+        const material = new THREE.MeshBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthTest: false });
+        const mesh = new THREE.Mesh(geometry, material);
+        const coplanarPoint = plane.coplanarPoint(new THREE.Vector3());
+        const focal = new THREE.Vector3().copy(coplanarPoint).add(plane.normal);
+        mesh.position.copy(coplanarPoint);
+        mesh.lookAt(focal);
+        this._sectionVisual = mesh;
+        this.scene.add(mesh);
+    }
+
+    _applyUpVector() {
+        CURRENT_VERTICAL_AXIS = String(this.viewerConfig?.coordinateMap?.verticalAxis || 'Z').toUpperCase() === 'Y' ? 'Y' : 'Z';
+        const upVec = _verticalVector();
+        this.scene.up.copy(upVec);
+        if (this._orthoCamera) {
+            this._orthoCamera.up.copy(upVec);
+        }
+        if (this._perspCamera) {
+            this._perspCamera.up.copy(upVec);
+        }
+        if (this.controls?.object) {
+            this.controls.object.up.copy(upVec);
+            this.controls.update();
+        }
+    }
+
+    applyHeatmap(options = {}) {
+        if (!this._componentGroup) return;
+        const metric = String(options.metric || 'T1');
+        let bucketCount = Math.max(2, Number(options.bucketCount || 5));
+        const palette = Array.isArray(options.palette) && options.palette.length
+            ? options.palette
+            : ['#0ea5e9', '#22c55e', '#eab308', '#f97316', '#ef4444'];
+        const nullColor = String(options.nullColor || '#6b7280');
+
+        const values = [];
+        const groups = new Map();
+        for (const [componentId, meshes] of this._componentMeshIndex.entries()) {
+            const source = meshes?.[0]?.userData?.source || {};
+            const attrs = meshes?.[0]?.userData?.attributes || {};
+            const value = this._metricValueFromSource(source, attrs, metric);
+            groups.set(componentId, { meshes, value: Number.isFinite(value) ? value : null });
+            if (Number.isFinite(value)) values.push(value);
+        }
+
+        if (!values.length) {
+            this._emitTrace('heatmap-empty', { metric });
+            return;
+        }
+
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const span = Math.max(1e-9, max - min);
+        if (span < 1e-9) bucketCount = 1;
+
+        for (const { meshes, value } of groups.values()) {
+            const ratio = value === null ? null : (value - min) / span;
+            const index = ratio === null
+                ? -1
+                : Math.min(palette.length - 1, Math.max(0, Math.floor(ratio * bucketCount)));
+            const colorObj = new THREE.Color(index < 0 ? nullColor : palette[index]);
+            for (const mesh of meshes) {
+                const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                for (const mat of mats) {
+                    if (mat?.color) mat.color.copy(colorObj);
+                }
+            }
+        }
+
+        this._heatmapState = { metric, min, max, bucketCount, palette };
+        this._emitTrace('heatmap-apply', { metric, min, max, bucketCount });
+        this._renderHeatmapPanel();
+    }
+
+    _metricValueFromSource(source = {}, attrs = {}, metric = 'T1') {
+        let value = Number(source?.[metric]);
+        if (!Number.isFinite(value)) value = Number(attrs?.[metric]);
+        if (!Number.isFinite(value) && metric === 'T1') value = Number(source?.T1);
+        if (!Number.isFinite(value) && metric === 'T2') value = Number(source?.T2);
+        if (!Number.isFinite(value) && metric === 'P1') value = Number(source?.P1);
+        if (!Number.isFinite(value) && metric === 'P2') value = Number(source?.P2);
+        return value;
+    }
+
+    _rebuildLegendLabels(components) {
+        const cfg = this.viewerConfig || {};
+        if (cfg.disableAllSettings || cfg.legend?.canvasLabels?.enabled === false) return;
+        const mode = cfg.legend?.mode || 'none';
+        const wantLegendLabels = mode !== 'none';
+        const wantNodeLabels = !!cfg.legend?.canvasLabels?.showNodeIds;
+        if (!wantLegendLabels && !wantNodeLabels) return;
+        const maxPerLabel = Number(cfg.legend?.canvasLabels?.maxPerLabel || 3);
+        const fontSize = Number(cfg.legend?.canvasLabels?.fontSize || 16);
+        const textColor = cfg.legend?.canvasLabels?.textColor || '#ffffff';
+        const bg = cfg.legend?.canvasLabels?.background || '#111827cc';
+        const pad = Number(cfg.legend?.canvasLabels?.padding || 4);
+        const vert = _verticalVector();
+
+        const labels = new Map();
+        const addCandidate = (label, pos) => {
+            if (!label || !pos) return;
+            if (!labels.has(label)) labels.set(label, []);
+            labels.get(label).push(pos);
+        };
+
+        // legend-driven labels
+        if (wantLegendLabels) {
+            for (const comp of components || []) {
+                const label = this._labelForComponent(comp, mode);
+                if (!label) continue;
+                const pos = this._componentLabelPosition(comp, vert);
+                addCandidate(label, pos);
+            }
+        }
+
+        // optional node IDs
+        if (wantNodeLabels) {
+            let count = 0;
+            const maxNodes = Number(cfg.legend?.canvasLabels?.maxNodeLabels || 80);
+            for (const comp of components || []) {
+                if (count >= maxNodes) break;
+                const src = comp?.source || {};
+                const pts = comp?.points || [];
+                const nodePairs = [];
+                if (src.FROM_NODE !== undefined && pts[0]) nodePairs.push([`N${src.FROM_NODE}`, pts[0]]);
+                if (src.TO_NODE !== undefined && pts[1]) nodePairs.push([`N${src.TO_NODE}`, pts[1]]);
+                for (const [nid, p] of nodePairs) {
+                    const pos = mapCoord(p);
+                    if (pos) {
+                        addCandidate(nid, pos.clone().add(vert.clone().normalize().multiplyScalar((comp?.bore || 25) * 0.7)));
+                        count += 1;
+                        if (count >= maxNodes) break;
+                    }
+                }
+                if (count >= maxNodes) break;
+            }
+        }
+
+        if (!labels.size) return;
+        this._legendLabelGroup = new THREE.Group();
+        for (const [label, positions] of labels.entries()) {
+            const dedup = this._shuffleArray(positions).slice(0, maxPerLabel);
+            for (const p of dedup) {
+                const sprite = this._makeTextSprite(label, { fontSize, textColor, background: bg, padding: pad });
+                sprite.position.copy(p);
+                this._legendLabelGroup.add(sprite);
+            }
+        }
+        if (this._legendLabelGroup.children.length) {
+            this.scene.add(this._legendLabelGroup);
+        } else {
+            this._legendLabelGroup = null;
+        }
+    }
+
+    _labelForComponent(comp, mode) {
+        const src = comp?.source || {};
+        const attrs = comp?.attributes || {};
+        if (mode === 'od') {
+            const od = Number(comp?.bore || src?.DIAMETER || 0) * 2;
+            return od ? `OD ${Math.round(od)}` : null;
+        }
+        if (mode === 'material') {
+            const m = attrs.MATERIAL || src.MATERIAL;
+            return m ? String(m) : null;
+        }
+        if (mode === 'supportKind') {
+            if (String(comp?.type).toUpperCase() !== 'SUPPORT') return null;
+            const k = attrs.SUPPORT_KIND || src.SUPPORT_KIND;
+            return k ? String(k) : null;
+        }
+        if (mode === 'heatmap' && this._heatmapState) {
+            const metric = this._heatmapState.metric;
+            const value = this._metricValueFromSource(src, attrs, metric);
+            if (!Number.isFinite(value)) return 'null';
+            const { min, max, bucketCount } = this._heatmapState;
+            const span = Math.max(1e-9, max - min);
+            const idx = Math.min(bucketCount - 1, Math.max(0, Math.floor(((value - min) / span) * bucketCount)));
+            const start = min + (span * idx) / bucketCount;
+            const end = min + (span * (idx + 1)) / bucketCount;
+            return `${metric} ${start.toFixed(1)}–${end.toFixed(1)}`;
+        }
+        return null;
+    }
+
+    _componentLabelPosition(comp, vertical) {
+        const pts = comp?.points || [];
+        let base = null;
+        if (comp?.coOrds) base = mapCoord(comp.coOrds);
+        else if (pts.length) {
+            const sum = pts.reduce((acc, p) => ({
+                x: acc.x + Number(p.x || 0),
+                y: acc.y + Number(p.y || 0),
+                z: acc.z + Number(p.z || 0),
+            }), { x: 0, y: 0, z: 0 });
+            const mid = { x: sum.x / pts.length, y: sum.y / pts.length, z: sum.z / pts.length };
+            base = mapCoord(mid);
+        } else if (comp?.centrePoint) {
+            base = mapCoord(comp.centrePoint);
+        }
+        if (!base) return null;
+        const offset = (comp?.bore ? comp.bore / 2 : 25);
+        return base.clone().add(vertical.clone().normalize().multiplyScalar(offset * 1.2));
+    }
+
+    _makeTextSprite(text, { fontSize = 16, textColor = '#fff', background = '#111827cc', padding = 4 } = {}) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const font = `bold ${fontSize}px Inter, Arial, sans-serif`;
+        ctx.font = font;
+        const textWidth = ctx.measureText(text).width;
+        const width = Math.ceil(textWidth + padding * 2);
+        const height = Math.ceil(fontSize + padding * 2);
+        canvas.width = width;
+        canvas.height = height;
+        ctx.font = font;
+        ctx.fillStyle = background;
+        ctx.fillRect(0, 0, width, height);
+        ctx.fillStyle = textColor;
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, padding, height / 2);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false, sizeAttenuation: true });
+        const sprite = new THREE.Sprite(material);
+        const scaleFactor = Number(this.viewerConfig?.legend?.canvasLabels?.scale || 1);
+        sprite.scale.set(width, height, 1).multiplyScalar(0.25 * scaleFactor);
+        return sprite;
+    }
+
+    _shuffleArray(arr = []) {
+        const a = arr.slice();
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+    }
+
+    _renderHeatmapPanel() {
+        const cfg = this.viewerConfig || {};
+        if (cfg.disableAllSettings || cfg.heatmap?.canvasPanel?.enabled === false || !this._heatmapState) {
+            if (this._heatmapPanelEl?.parentNode === this.container) this.container.removeChild(this._heatmapPanelEl);
+            this._heatmapPanelEl = null;
+            return;
+        }
+        if (!this._heatmapPanelEl) {
+            this._heatmapPanelEl = document.createElement('div');
+            this._heatmapPanelEl.className = 'heatmap-panel-overlay';
+            this._heatmapPanelEl.style.position = 'absolute';
+            this._heatmapPanelEl.style.zIndex = '12';
+            this._heatmapPanelEl.style.pointerEvents = 'none';
+            this._heatmapPanelEl.style.font = '12px Inter, Arial, sans-serif';
+            this._heatmapPanelEl.style.background = '#111827cc';
+            this._heatmapPanelEl.style.color = '#f8fafc';
+            this._heatmapPanelEl.style.padding = '8px';
+            this._heatmapPanelEl.style.borderRadius = '6px';
+            this._heatmapPanelEl.style.boxShadow = '0 4px 10px rgba(0,0,0,0.35)';
+            this.container.style.position = this.container.style.position === 'static' ? 'relative' : this.container.style.position;
+            this.container.appendChild(this._heatmapPanelEl);
+        }
+        const pos = cfg.heatmap?.canvasPanel?.position || 'top-right';
+        this._heatmapPanelEl.style.top = pos.startsWith('top') ? '12px' : 'unset';
+        this._heatmapPanelEl.style.bottom = pos.startsWith('bottom') ? '12px' : 'unset';
+        this._heatmapPanelEl.style.left = pos.endsWith('left') ? '12px' : 'unset';
+        this._heatmapPanelEl.style.right = pos.endsWith('right') ? '12px' : 'unset';
+
+        const { metric, min, max, bucketCount, palette } = this._heatmapState;
+        const span = Math.max(1e-9, max - min);
+        const rows = [];
+        const values = [];
+        this._componentMeshIndex.forEach((meshes) => {
+            const source = meshes?.[0]?.userData?.source || {};
+            const attrs = meshes?.[0]?.userData?.attributes || {};
+            const v = this._metricValueFromSource(source, attrs, metric);
+            if (Number.isFinite(v)) values.push(v);
+        });
+        const uniqueBuckets = new Map();
+        for (const v of values) {
+            const ratio = (v - min) / span;
+            const idx = bucketCount === 1 ? 0 : Math.min(bucketCount - 1, Math.max(0, Math.floor(ratio * bucketCount)));
+            if (!uniqueBuckets.has(idx)) uniqueBuckets.set(idx, { color: palette[Math.min(idx, palette.length - 1)], sample: v });
+        }
+        uniqueBuckets.forEach((entry, idx) => {
+            const label = bucketCount === 1 ? `${metric} ${entry.sample.toFixed(2)}` : `${metric} ≈ ${entry.sample.toFixed(2)}`;
+            rows.push(`<div style="display:flex;align-items:center;gap:8px;margin:2px 0;">
+              <span style="width:14px;height:14px;background:${entry.color};display:inline-block;border:1px solid #ffffff55;border-radius:2px;"></span>
+              <span style="font-variant-numeric:tabular-nums;">${label}</span>
+            </div>`);
+        });
+        this._heatmapPanelEl.innerHTML = `<div style="font-weight:700;margin-bottom:4px;">Heatmap (${metric})</div>${rows.join('')}`;
+    }
+
+    /**
+     * Render MESSAGE-CIRCLE node labels as CSS2D overlays.
+     * @param {Array<{pos:{x,y,z}, text:string}>} nodes
+     */
+    loadMessageCircleNodes(nodes = []) {
+        // Clear previous labels
+        while (this._msgCircleGroup.children.length) {
+            this._msgCircleGroup.remove(this._msgCircleGroup.children[0]);
+        }
+        for (const { pos, text } of nodes) {
+            if (!pos || !text) continue;
+            const div = document.createElement('div');
+            div.textContent = text;
+            div.style.cssText = `
+                font: 700 10px/1 "Courier New", monospace;
+                color: #fff;
+                background: #1a56db;
+                padding: 2px 5px;
+                border: 2px solid #93c5fd;
+                border-radius: 999px;
+                pointer-events: none;
+                white-space: nowrap;
+                box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+                letter-spacing: 0.03em;
+            `;
+            const obj = new CSS2DObject(div);
+            const mapped = mapCoord(pos);
+            if (mapped) {
+                obj.position.copy(mapped);
+                obj.position.y += 8;
+            }
+            obj.userData.type = 'msg-circle-label';
+            this._msgCircleGroup.add(obj);
+        }
+    }
+
+    /**
+     * Render MESSAGE-SQUARE annotation labels as CSS2D overlays.
+     * @param {Array<{pos:{x,y,z}, text:string}>} nodes
+     */
+    loadMessageSquareNodes(nodes = []) {
+        while (this._msgSquareGroup.children.length) {
+            this._msgSquareGroup.remove(this._msgSquareGroup.children[0]);
+        }
+        for (const { pos, text } of nodes) {
+            if (!pos || !text) continue;
+            const div = document.createElement('div');
+            div.textContent = text;
+            div.style.cssText = `
+                font: 600 9px/1.2 "Courier New", monospace;
+                color: #1a1a00;
+                background: rgba(255,235,59,0.92);
+                padding: 2px 5px;
+                border: 1px solid rgba(161,120,0,0.6);
+                border-radius: 3px;
+                pointer-events: none;
+                white-space: nowrap;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+                max-width: 220px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            `;
+            const obj = new CSS2DObject(div);
+            const mapped = mapCoord(pos);
+            if (mapped) {
+                obj.position.copy(mapped);
+                obj.position.y += 14;
+            }
+            obj.userData.type = 'msg-square-label';
+            this._msgSquareGroup.add(obj);
+        }
+    }
+
+    /** Tear down — clean up all resources */
+    dispose() {
+        if (this._animId) cancelAnimationFrame(this._animId);
+        window.removeEventListener('resize', this._onResize);
+        if (this.controls) this.controls.dispose();
+        if (this.renderer?.domElement && this._onPointerDown) {
+            this.renderer.domElement.removeEventListener('pointerdown', this._onPointerDown);
+        }
+
+        // Dispose all geometries/materials
+        this.scene.traverse(obj => {
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                else obj.material.dispose();
+            }
+        });
+
+        if (this.renderer) {
+            this.renderer.dispose();
+            if (this.renderer.domElement?.parentNode === this.container) {
+                this.container.removeChild(this.renderer.domElement);
+            }
+        }
+        if (this._css2dRenderer) {
+            if (this._css2dRenderer.domElement?.parentNode === this.container) {
+                this.container.removeChild(this._css2dRenderer.domElement);
+            }
+        }
+        if (this._viewCubeEl?.parentNode === this.container) {
+            this.container.removeChild(this._viewCubeEl);
+        }
+        if (this._axisGizmoEl?.parentNode === this.container) {
+            this.container.removeChild(this._axisGizmoEl);
+        }
+        if (this._heatmapPanelEl?.parentNode === this.container) {
+            this.container.removeChild(this._heatmapPanelEl);
+        }
+        this._reportMeasurement(null);
+        this._emitTrace('dispose', {});
+    }
+}

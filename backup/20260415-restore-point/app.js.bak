@@ -1,0 +1,56 @@
+import { loadStickyState } from './state.js';
+import { state } from './state.js';
+import { renderGeometry } from '../tabs/geometry-tab.js';
+import { renderViewer3D } from '../tabs/viewer3d-tab.js';
+import { renderAdvancedGlbViewerPanel } from '../js/pcf2glb/ui/AdvancedGlbViewerPanel.js';
+import { renderPcfxConverterTab } from '../tabs/pcfx-converter-tab.js';
+import { emit } from './event-bus.js';
+
+const TABS = [
+  { id: 'geometry',  label: 'Geometry',    render: renderGeometry },
+  { id: 'viewer3d',  label: '3D Viewer',   render: renderViewer3D },
+  { id: 'adv-glb',   label: 'Advanced GLB Viewer', render: renderAdvancedGlbViewerPanel },
+  { id: 'pcfx-converter', label: 'PCF<->PCFX<->GLB', render: renderPcfxConverterTab },
+];
+
+let _activeDestroyFn = null;
+
+export function init() {
+  loadStickyState();
+  _buildTabBar();
+  _switchTab('geometry');
+}
+
+function _buildTabBar() {
+  const bar = document.getElementById('tab-bar');
+  bar.innerHTML = TABS.map(t => 
+    `<button class="tab-btn" data-tab="${t.id}">${t.label}</button>`
+  ).join('');
+
+  bar.addEventListener('click', e => {
+    const btn = e.target.closest('.tab-btn');
+    if (!btn) return;
+    _switchTab(btn.dataset.tab);
+  });
+}
+
+function _switchTab(tabId) {
+  const content = document.getElementById('tab-content');
+  state.activeTab = tabId;
+  emit('tab-changed', tabId);
+  if (_activeDestroyFn) {
+      try { _activeDestroyFn(); } catch (err) { console.error(err); }
+      _activeDestroyFn = null;
+  }
+  content.innerHTML = '';
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabId);
+  });
+  const tabDef = TABS.find(t => t.id === tabId);
+  if (tabDef && tabDef.render) {
+    const destroyFn = tabDef.render(content);
+    if (typeof destroyFn === 'function') {
+        _activeDestroyFn = destroyFn;
+    }
+  }
+}

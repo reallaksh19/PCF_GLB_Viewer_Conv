@@ -1,0 +1,10 @@
+Executed command:
+node --experimental-default-type=module viewer/tests/run-interface-tests.mjs
+
+Observed result:
+✅ conversion-config unit tests passed.
+✅ interchange UI integration tests passed.
+✅ interchange export smoke tests passed.
+✅ A6 UI Surface integration tests passed.
+✅ Export roundtrip integration tests passed.
+✅ interface test suite passed.
