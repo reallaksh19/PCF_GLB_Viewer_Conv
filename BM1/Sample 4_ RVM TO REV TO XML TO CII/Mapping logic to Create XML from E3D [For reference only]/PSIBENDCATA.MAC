@@ -1,0 +1,55 @@
+-- <wd>6june2008 -- DUN923 -- AVEVA PSI12.0 conversion from VANTAGE PSI11.6
+-- Modified code so that Syntax Error does occur with NEW CATALOGUE syntax and
+-- SPWL /PSI-SPWL added to correct ERROR cannot build NEW SPEC at this element type i.e. /PSI-VARI
+
+-- Macro to build the PSI catalogue or vari bends
+NEW CATA /PSI-CATA
+
+NEW SECT /PSI-SECT
+
+NEW CATE /VARI-BEND
+
+NEW SCOMP /PSI-VARI
+GTYP BEND
+
+
+NEW PTSET /PSI-VARI-PTSE
+
+NEW PTAXIS
+NUMB 1
+PCON TUB
+PBOR ( ATTRIB DESP[1 ] )
+PAXI -X
+
+NEW PTAXIS
+NUMB 2
+PCON TUB
+PBOR ( ATTRIB DESP[1 ] )
+PAXI X DDANGLE Y
+
+OLD /PSI-VARI
+PTRE /PSI-VARI-PTSE
+
+NEW SPWL /PSI-SPWL
+
+NEW SPECIFICATION /PSI-SPEC
+DESC 'Components for PSI'
+LNTP unset
+QUES TYPE
+PURP PIPI
+CCOL 39
+TDEF 'NONE'
+
+NEW SELEC
+QUES STYP
+TANS 'BEND'
+TDEF 'VARI'
+TQUES 'STYPE'
+
+NEW SPCOMPONENT /PSI-SPEC/VARI
+TANS 'A'
+
+OLD /PSI-SPEC/VARI
+CATR /PSI-VARI
+
+savework

@@ -1,0 +1,125 @@
+/PSIWRL
+handle any
+  NEW UWRLD /PSIWRL
+endhandle
+
+/SOLI-MATERIAL-NUMBER
+handle any
+  NEW UDA /SOLI-MATERIAL-NUMBER
+  UDNA 'MATNUM'
+  ABLE 6
+  UTYP REAL
+  ELEL ADD SOLI SMTE
+  DFLT 0
+endhandle  
+
+/TUBE-WALL-THICKNESS
+handle any
+  NEW UDA /TUBE-WALL-THICKNESS
+  UDNA 'TWALL'
+  ABLE 4
+  UTYP REAL
+  ELEL ADD TUBD
+endhandle  
+
+
+/COMP-WALL-THICKNESS
+handle any
+  NEW UDA /COMP-WALL-THICKNESS
+  UDNA 'CWALL'
+  ABLE 4
+  UTYP REAL
+  ULEN 4
+  ELEL ADD CMPD
+endhandle  
+
+
+/COMP-LOCAL-WEIGHT
+handle any
+  NEW UDA /COMP-LOCAL-WEIGHT
+  UDNA 'PSIWEIGHT'
+  ABLE 6
+  UTYP REAL
+  ELEL ADD ALLP ANCI LUANCI TRANCI
+  DFLT 0
+endhandle
+
+/PSIsystem
+handle any
+  NEW UDA /PSIsystem
+  UDNA 'PsiSystem'
+  ABLE 6
+  UTYP REF
+  ULEN 120
+  RPTX 'Stress System'
+  ELEL ADD PIPE BRAN
+endhandle
+
+END
+/stressdate 
+handle any
+  NEW UDA /stressdate
+  UDNA 'PsiDate'
+  ABLE 4
+  UTYP TEXT
+  ULEN 30
+  RPTX 'Stress Date'
+  ELEL ADD PIPE
+endhandle
+
+END  
+/PSINodeType
+handle any
+ NEW UDA /PSINodeType
+ UDNA 'NodeType'
+ ABLE 7
+ UTYP REAL
+ RPTX 'Node Type'
+ ULEN 6
+ ELEL rem all
+ ELEL ADD ANCI ATTA BEND ELBO FLAN LUANCI REDU TEE TRANCI
+ endhandle
+
+END
+/PSINodeGap 
+handle any
+  NEW UDA /PSINodeGap
+  UDNA 'Nodegap'
+  ABLE 7
+  UTYP REAL
+  UUNI 'DISTANCE'
+  RPTX 'Support Gap'
+  ULEN 6
+  ELEL rem all
+  ELEL ADD ANCI ATTA BEND ELBO FLAN LUANCI REDU TEE TRANCI   
+endhandle  
+
+END 
+/PSINodeStiffness 
+handle any
+  NEW UDA /PSINodeStiffness
+  UDNA 'Nodestiff'
+  ABLE 7
+  UTYP REAL
+  RPTX 'Support Gap'
+  ULEN 6
+  ELEL rem all
+  ELEL ADD ANCI ATTA BEND ELBO FLAN LUANCI REDU TEE TRANCI
+endhandle  
+
+END  
+/PSINodeFriction
+handle any 
+  NEW UDA /PSINodeFriction
+  UDNA 'NodeFriction'
+  ABLE 7
+  UTYP REAL
+  RPTX 'Node Friction'
+  ULEN 6
+  ELEL rem all
+  ELEL ADD ANCI ATTA BEND ELBO FLAN LUANCI REDU TEE TRANCI
+endhandle  
+
+savework
+compile
+

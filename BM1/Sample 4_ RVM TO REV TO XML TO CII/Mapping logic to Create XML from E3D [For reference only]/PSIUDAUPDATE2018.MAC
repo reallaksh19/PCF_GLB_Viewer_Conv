@@ -1,0 +1,26 @@
+/PSINodeType
+handle any
+elsehandle none
+  ULEN 6
+endhandle
+
+/PSINodeGap
+handle any
+elsehandle none
+  ULEN 6
+endhandle
+
+/PSINodeStiffness
+handle any
+elsehandle none
+  ULEN 6
+endhandle
+
+/PSINodeFriction
+handle any
+elsehandle none
+  ULEN 6
+endhandle
+
+savework
+compile
