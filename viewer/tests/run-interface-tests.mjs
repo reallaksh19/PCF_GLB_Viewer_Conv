@@ -16,6 +16,8 @@ const tests = [
   './unit/rvm/rvm-bundle-manifest.test.js',
   './unit/rvm/rvm-identity-map.test.js',
   './unit/rvm/rvm-capabilities.test.js',
+  './unit/rvm/rvm-saved-views.test.js',
+  './unit/rvm/rvm-tag-xml.test.js',
   './integration/rvm-tab-shell.test.js',
   './integration/rvm-load-pipeline.test.js',
 ];
