@@ -15,14 +15,25 @@ const tests = [
   './integration/export-roundtrip.test.js',
   './integration/rvm-viewer-commands.test.js',
   './unit/rvm/rvm-search.test.js',
+  './unit/rvm/rvm-bundle-manifest.test.js',
+  './unit/rvm/rvm-identity-map.test.js',
+  './unit/rvm/rvm-capabilities.test.js',
+  './integration/rvm-tab-shell.test.js',
+  './integration/rvm-load-pipeline.test.js',
 ];
 
 for (const rel of tests) {
   const abs = path.join(__dirname, rel);
   const importUrl = pathToFileURL(abs).href;
+  const runnerScript = `
+    global.localStorage = { getItem: () => null, setItem: () => {} };
+    global.window = { localStorage: global.localStorage };
+    if (!global.crypto) global.crypto = { randomUUID: () => Math.random().toString() };
+    import(${JSON.stringify(importUrl)});
+  `;
   const result = spawnSync(
     process.execPath,
-    ['--input-type=module', '--eval', `import(${JSON.stringify(importUrl)});`],
+    ['--input-type=module', '--eval', runnerScript],
     { stdio: 'inherit' },
   );
   if (result.status !== 0) {
