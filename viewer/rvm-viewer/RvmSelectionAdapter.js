@@ -53,6 +53,7 @@ export class RvmSelectionAdapter {
             }
         }
 
+
         // If clicked on nothing, clear selection
         this.clearSelection();
     }
@@ -66,6 +67,7 @@ export class RvmSelectionAdapter {
         }
         canonicalId = canonicalId || renderId; // fallback
 
+
         this.selectByCanonicalId(canonicalId);
 
         // Optional: emit event for RVM_NODE_SELECTED
@@ -78,6 +80,7 @@ export class RvmSelectionAdapter {
         this.clearSelection();
 
         this._selectedCanonicalId = canonicalId;
+
 
         if (this.identityMap) {
             this._selectedRenderIds = this.identityMap.getRenderIdsByCanonicalId(canonicalId) || [canonicalId];
@@ -116,6 +119,7 @@ export class RvmSelectionAdapter {
     _highlight(renderIds, colorHex) {
         const renderIdSet = new Set(renderIds);
 
+
         this.modelGroup.traverse((obj) => {
             if (obj.isMesh) {
                 const name = obj.userData?.name || obj.name || obj.uuid;
@@ -129,6 +133,7 @@ export class RvmSelectionAdapter {
     _setEmissive(mesh, colorHex) {
         if (!mesh.material) return;
         const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+
 
         const renderId = mesh.userData?.name || mesh.name || mesh.uuid;
 
@@ -154,6 +159,7 @@ export class RvmSelectionAdapter {
                 if (this._originalMaterials.has(renderId)) {
                     const ogs = this._originalMaterials.get(renderId);
                     const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+
 
                     for (let i = 0; i < materials.length; i++) {
                         const m = materials[i];

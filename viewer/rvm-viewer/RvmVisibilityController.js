@@ -3,6 +3,7 @@ export class RvmVisibilityController {
         this.modelGroup = modelGroup;
         this.identityMap = identityMap;
 
+
         // Track the current state
         this._hiddenCanonicalIds = new Set();
         this._isolatedCanonicalIds = new Set();
@@ -20,6 +21,7 @@ export class RvmVisibilityController {
         this._applyVisibility();
     }
 
+
     isolateByRenderIds(renderIds) {
         if (!this.identityMap) {
             // Fallback: isolate strictly by match
@@ -31,6 +33,7 @@ export class RvmVisibilityController {
             });
             return;
         }
+
 
         // Attempt to find canonical IDs from render IDs
         // Usually, the identity map goes source -> canonical -> renderIds
@@ -68,6 +71,7 @@ export class RvmVisibilityController {
 
         const isIsolatedMode = this._isolatedCanonicalIds.size > 0;
 
+
         // Let's resolve all valid renderIds for hidden/isolated
         const hideRenderIds = new Set();
         const isolateRenderIds = new Set();
@@ -90,6 +94,7 @@ export class RvmVisibilityController {
         this.modelGroup.traverse((obj) => {
             if (obj.isMesh) {
                 const name = obj.userData?.name || obj.name || obj.uuid;
+
 
                 if (isIsolatedMode) {
                     obj.visible = isolateRenderIds.has(name);

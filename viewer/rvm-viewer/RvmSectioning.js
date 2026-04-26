@@ -56,6 +56,10 @@ export class RvmSectioning {
         box.expandByScalar(-this._padding); // shrink box by padding
         this._sectionBounds = box.clone();
 
+
+        box.expandByScalar(-this._padding); // shrink box by padding
+        this._sectionBounds = box.clone();
+
         this._applyBoxPlanes(box);
         this._renderSectionBoxVisual(box);
     }
@@ -109,6 +113,7 @@ export class RvmSectioning {
     _applyCurrentSectionClipping() {
         if (!this.modelGroup || !this.renderer) return;
         const enabled = this._sectionMode !== 'OFF' && this._clipPlanes.length > 0;
+
 
         // Ensure local clipping is true
         this.renderer.localClippingEnabled = true;

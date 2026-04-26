@@ -33,6 +33,7 @@ async function runTests() {
     let success = true;
     const errors = [];
 
+
     // Mock Data
     const mockIdentityMap = {
         getRenderIdsByCanonicalId: (id) => [id + '_render'],
@@ -49,6 +50,7 @@ async function runTests() {
 
     // 1. Metadata Tests
     const metaIndex = new RvmMetadataIndex(mockRvmIndex, mockIdentityMap);
+
 
     // ✅ click in scene (renderObjectId) → correct attributes returned for that mesh
     const attrs = metaIndex.getAttributesByRenderId('OBJ:2_render');
@@ -70,6 +72,7 @@ async function runTests() {
 
     // 2. Search Tests
     const searchIndex = new RvmSearchIndex(mockRvmIndex, mockIdentityMap);
+
 
     // Need to await build since we use setTimeout(0)
     await searchIndex.build();
@@ -132,6 +135,7 @@ async function runTests() {
     // Simulate click on Root Pipe's label Div
     const rootNodeLi = treeEl.children[0].children[0];
     const labelDiv = rootNodeLi.children[0];
+
 
     // Simulate the e.stopPropagation() mock event
     labelDiv.onclick({ stopPropagation: () => {} });
