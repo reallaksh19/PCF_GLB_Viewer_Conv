@@ -14,6 +14,7 @@ const tests = [
   './integration/model-exchange-ui.test.js',
   './integration/export-roundtrip.test.js',
   './integration/rvm-viewer-commands.test.js',
+  './unit/rvm/rvm-search.test.js',
 ];
 
 for (const rel of tests) {
