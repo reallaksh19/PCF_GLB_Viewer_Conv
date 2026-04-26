@@ -1,0 +1,28 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "playwright.config.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reallaksh19/PCF_GLB_Viewer_Conv.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/reallaksh19/PCF_GLB_Viewer_Conv/issues"
+  },
+  "homepage": "https://github.com/reallaksh19/PCF_GLB_Viewer_Conv#readme",
+  "dependencies": {
+    "jsdom": "^29.0.2",
+    "three": "^0.184.0"
+  }
+}

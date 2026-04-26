@@ -25,7 +25,7 @@ function ensureStylesheet() {
   if (document.querySelector('link[data-model-exchange-style="true"]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = './tabs/model-exchange-tab.css';
+  link.href = './viewer/tabs/model-exchange-tab.css';
   link.dataset.modelExchangeStyle = 'true';
   document.head.appendChild(link);
 }

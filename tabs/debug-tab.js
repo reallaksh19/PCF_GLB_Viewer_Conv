@@ -1,3 +1,4 @@
+import { RuntimeEvents } from '../contracts/runtime-events.js';
 /**
  * debug-tab.js — Rich parser log, report population summary, computation details,
  *                validation errors, and raw parsed JSON viewer.
@@ -7,6 +8,7 @@ import { state } from '../core/state.js';
 import { on } from '../core/event-bus.js';
 import { prettyUnit, unitSuffix } from '../utils/formatter.js';
 import { buildUniversalCSV, normalizeToPCF, buildPcfFromContinuity } from '../utils/accdb-to-pcf.js';
+import { calcHistory } from '../calc/core/calc-session.js';
 
 let _listenersRegistered = false;
 
@@ -100,6 +102,7 @@ function _render(container) {
 
       <!-- Calc History (Misc Calc/Slug) -->
       <h4 class="sub-heading" style="margin-top:1.5rem">Calculation Trace History
+        <span class="badge badge-neutral">${calcHistory.length} runs</span>
       </h4>
       <div class="table-scroll">
         <table class="data-table" style="width:100%;">
@@ -109,8 +112,30 @@ function _render(container) {
             </tr>
           </thead>
           <tbody>
-  <tr><td colspan="5" class="center muted">No calculations executed.</td></tr>
-</tbody>
+            ${calcHistory.length ? calcHistory.map((h, idx) => {
+              const runIdx = calcHistory.length - 1 - idx;
+              return `<tr style="cursor:pointer;" class="calc-history-row" data-idx="${runIdx}">
+                <td>${h.ts.toLocaleTimeString()}</td>
+                <td>${h.metadata.name}</td>
+                <td>${h.metadata.unitMode}</td>
+                <td><span style="color:${h.pass ? 'green' : 'red'}">${h.pass ? 'PASS' : 'FAIL'}</span></td>
+                <td>${h.warnings.length}</td>
+              </tr>
+              <tr id="calc-history-detail-${runIdx}" style="display:none; background:#0d1117;">
+                <td colspan="5">
+                  <div style="padding:10px; font-family:monospace; font-size:11px;">
+                    ${h.inputResolution ? `<strong style="color:#ce9178;">[Input Resolution]</strong><pre style="margin:0; color:#9cdcfe;">${JSON.stringify(h.inputResolution, null, 2)}</pre>` : ''}
+                    <strong style="color:#ce9178;">[Equation Trace]</strong>
+                    ${h.steps.map((s, i) => `<div>${i+1}. ${s}</div>`).join('')}
+                    <strong style="color:#ce9178; display:block; margin-top:5px;">[Intermediate Values]</strong><pre style="margin:0; color:#9cdcfe;">${JSON.stringify(h.intermediateValues, null, 2)}</pre>
+                    <strong style="color:#ce9178;">[Outputs]</strong><pre style="margin:0; color:#9cdcfe;">${JSON.stringify(h.outputs, null, 2)}</pre>
+                    ${h.benchmark ? `<strong style="color:#ce9178;">[Benchmark]</strong><pre style="margin:0; color:#9cdcfe;">${JSON.stringify(h.benchmark, null, 2)}</pre>` : ''}
+                    ${h.sourceSnapshot ? `<strong style="color:#ce9178;">[Source Snapshot]</strong><pre style="margin:0; color:#9cdcfe;">${JSON.stringify(h.sourceSnapshot, null, 2)}</pre>` : ''}
+                  </div>
+                </td>
+              </tr>`;
+            }).reverse().join('') : '<tr><td colspan="5" class="center muted">No calculations executed.</td></tr>'}
+          </tbody>
         </table>
       </div>
 
@@ -264,14 +289,16 @@ function _render(container) {
     // Trigger re-renders if elements changed
     if (hasChanges) {
         import('../core/event-bus.js').then(({ emit }) => {
-          emit('parse-complete', parsed);
+          emit(RuntimeEvents.PARSE_COMPLETE, parsed);
         });
     }
   });
 
   // Wire Calc History expanding rows
+  container.querySelectorAll('.calc-history-row').forEach(row => {
       row.addEventListener('click', () => {
           const idx = row.getAttribute('data-idx');
+          const detailRow = container.querySelector(`#calc-history-detail-${idx}`);
           if (detailRow) {
               detailRow.style.display = detailRow.style.display === 'none' ? 'table-row' : 'none';
           }

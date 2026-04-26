@@ -1,0 +1,328 @@
+/* RVM Viewer tab — overrides on top of viewer3d.css structural classes */
+
+.rvm-tab-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--geo-bg, #1a1c21);
+  color: var(--geo-text, #d4d4d4);
+}
+
+/* ── Capability banner ─────────────────────────────────────────────────── */
+
+.rvm-capability-banner {
+  padding: 3px 12px;
+  font-size: 11px;
+  background: var(--geo-banner-bg, #252830);
+  border-bottom: 1px solid var(--geo-border, #333);
+  color: var(--geo-text-muted, #888);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvm-capability-banner[data-mode="assisted"] {
+  color: #6fcf97;
+}
+
+/* ── Top ribbon ────────────────────────────────────────────────────────── */
+
+.geo-top-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--geo-ribbon-bg, #22242a);
+  border-bottom: 1px solid var(--geo-border, #333);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.rvm-ribbon-section {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rvm-ribbon-search {
+  flex: 1;
+  min-width: 120px;
+}
+
+.rvm-ribbon-search input {
+  width: 100%;
+  background: var(--geo-input-bg, #1a1c21);
+  border: 1px solid var(--geo-border, #444);
+  color: var(--geo-text, #d4d4d4);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.rvm-ribbon-search input:focus {
+  outline: none;
+  border-color: var(--geo-accent, #4a9eff);
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+
+.rvm-btn,
+.rvm-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  background: var(--geo-btn-bg, #2d3038);
+  border: 1px solid var(--geo-border, #444);
+  border-radius: 4px;
+  color: var(--geo-text, #d4d4d4);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s;
+}
+
+.rvm-btn:hover:not(:disabled),
+.rvm-tool-btn:hover {
+  background: var(--geo-btn-hover, #3a3d47);
+}
+
+.rvm-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.rvm-tool-btn svg,
+.rvm-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.rvm-tool-btn.is-active {
+  background: var(--geo-accent, #4a9eff);
+  color: #fff;
+  border-color: var(--geo-accent, #4a9eff);
+}
+
+.rvm-btn-file {
+  cursor: pointer;
+}
+
+.rvm-btn-assisted {
+  border-color: #6fcf97;
+  color: #6fcf97;
+}
+
+/* ── Body layout ───────────────────────────────────────────────────────── */
+
+.rvm-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Left panel (hierarchy + search) ──────────────────────────────────── */
+
+.rvm-left-panel {
+  width: 220px;
+  min-width: 160px;
+  max-width: 320px;
+  background: var(--geo-panel-bg, #1e2026);
+  border-right: 1px solid var(--geo-border, #333);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.rvm-panel-header {
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--geo-text-muted, #888);
+  border-bottom: 1px solid var(--geo-border, #333);
+  flex-shrink: 0;
+}
+
+/* ── Tree ──────────────────────────────────────────────────────────────── */
+
+.rvm-tree {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  flex: 1;
+  font-size: 12px;
+}
+
+.rvm-tree li {
+  padding: 3px 10px;
+  cursor: pointer;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvm-tree li:hover {
+  background: var(--geo-btn-hover, #3a3d47);
+}
+
+.rvm-tree li.is-selected {
+  background: var(--geo-accent, #4a9eff);
+  color: #fff;
+}
+
+/* ── Viewport ──────────────────────────────────────────────────────────── */
+
+.rvm-viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #0d0e11;
+}
+
+.rvm-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.rvm-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--geo-text-muted, #666);
+  text-align: center;
+  padding: 16px;
+}
+
+/* ── Right panel (attributes + tags) ──────────────────────────────────── */
+
+.rvm-right-panel {
+  width: 240px;
+  min-width: 180px;
+  max-width: 360px;
+  background: var(--geo-panel-bg, #1e2026);
+  border-left: 1px solid var(--geo-border, #333);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.rvm-attributes-panel {
+  flex: 1;
+  overflow-y: auto;
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.rvm-attr-row {
+  display: flex;
+  padding: 3px 10px;
+  gap: 8px;
+  border-bottom: 1px solid var(--geo-border, #2a2d35);
+}
+
+.rvm-attr-key {
+  color: var(--geo-text-muted, #888);
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.rvm-attr-value {
+  color: var(--geo-text, #d4d4d4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvm-attr-key.rvm-attr-pdms {
+  color: #6fcf97;
+  font-weight: 600;
+}
+
+/* ── Tag list ──────────────────────────────────────────────────────────── */
+
+.rvm-tag-list {
+  flex: 1;
+  overflow-y: auto;
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.rvm-tag-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--geo-border, #2a2d35);
+  gap: 4px;
+}
+
+.rvm-tag-item.is-unresolved {
+  color: #e2994a;
+}
+
+.rvm-tag-item.severity-high { border-left: 3px solid #e74c3c; }
+.rvm-tag-item.severity-medium { border-left: 3px solid #e2994a; }
+.rvm-tag-item.severity-low { border-left: 3px solid #27ae60; }
+
+.rvm-tag-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvm-tag-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.rvm-tag-jump,
+.rvm-tag-delete {
+  background: none;
+  border: none;
+  color: var(--geo-text-muted, #888);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 13px;
+  border-radius: 3px;
+}
+
+.rvm-tag-jump:hover { color: var(--geo-accent, #4a9eff); }
+.rvm-tag-delete:hover { color: #e74c3c; }
+
+/* ── Add tag button ────────────────────────────────────────────────────── */
+
+#rvm-add-tag-btn {
+  margin: 6px 10px;
+  justify-content: center;
+}
+
+/* ── CSS2D tag labels (Three.js overlay) ──────────────────────────────── */
+
+.rvm-tag-label {
+  background: rgba(30, 32, 38, 0.9);
+  border: 1px solid var(--geo-accent, #4a9eff);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: #d4d4d4;
+  cursor: pointer;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+.rvm-tag-label.severity-high { border-color: #e74c3c; }
+.rvm-tag-label.severity-medium { border-color: #e2994a; }
+.rvm-tag-label.severity-low { border-color: #27ae60; }

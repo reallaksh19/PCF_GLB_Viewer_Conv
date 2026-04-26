@@ -10,7 +10,7 @@ const { chromium } = require('playwright');
   
   // Click on "Model Exchange" tab explicitly
   await page.evaluate(() => {
-     const tabs = document.querySelectorAll('.tab-button');
+     const tabs = document.querySelectorAll('.tab-btn');
      for(let t of tabs) {
         if(t.textContent.includes('Model Exchange')) {
            t.click();
