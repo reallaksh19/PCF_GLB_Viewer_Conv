@@ -33,24 +33,13 @@ export class RvmStaticBundleLoader {
       throw new Error(errMessage);
     }
 
-    // Since we are loading bundles directly mapped in the objects,
-    // the artifacts should already be resolved as valid fetchable URLs or Blob URLs by the caller.
-    // If not provided in a resolvable format, we treat the artifact string itself as the URL.
-
-    const resolveUrl = async (url) => {
-      if (typeof ctx.resolveUrl === 'function') return await ctx.resolveUrl(url);
-      if (typeof ctx.getFileUrl === 'function') return await ctx.getFileUrl(url); // legacy fallback for tests
-      return url;
-    };
-
     // 2. GLB
     asyncSession.update('glb', 20);
     let gltf;
     try {
-      const glbUrl = await resolveUrl(manifest.artifacts.glb);
       gltf = await new Promise((resolve, reject) => {
         this.gltfLoader.load(
-          glbUrl,
+          manifest.artifacts.glb,
           resolve,
           (xhr) => {
              // Let's say 20 -> 50 for GLB progress
@@ -73,8 +62,7 @@ export class RvmStaticBundleLoader {
     let indexJson = null;
     if (manifest.artifacts.index) {
       try {
-        const indexUrl = await resolveUrl(manifest.artifacts.index);
-        const res = await fetch(indexUrl);
+        const res = await fetch(manifest.artifacts.index);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         indexJson = await res.json();
 
@@ -93,8 +81,7 @@ export class RvmStaticBundleLoader {
     let tagXmlText = null;
     if (manifest.artifacts.tags) {
       try {
-        const tagsUrl = await resolveUrl(manifest.artifacts.tags);
-        const res = await fetch(tagsUrl);
+        const res = await fetch(manifest.artifacts.tags);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         tagXmlText = await res.text();
       } catch (err) {
