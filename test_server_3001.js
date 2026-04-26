@@ -74,6 +74,7 @@ function fileExists(filePath) {
 function detectRvmParserBinary() {
     const candidates = [
         path.join(__dirname, '..', 'rvmparser', 'rvmparser-windows-bin.exe'),
+        path.join(__dirname, 'viewer', 'converters', 'bin', 'rvmparser-windows-bin.exe'),
         path.join(__dirname, 'rvmparser-windows-bin.exe'),
         'C:\\Code3\\rvmparser\\rvmparser-windows-bin.exe',
     ];
@@ -109,6 +110,135 @@ function safeCleanup(dirPath) {
         fs.rmSync(dirPath, { recursive: true, force: true });
     } catch {
         // Ignore cleanup errors.
+    }
+}
+
+
+async function handleRvmToGlbProbe(req, res) {
+    if (req.method === 'OPTIONS') {
+        res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS' });
+        res.end();
+        return;
+    }
+    const parserExe = detectRvmParserBinary();
+    if (parserExe) {
+        writeJson(res, 200, { reachable: true, version: '1.0' });
+    } else {
+        writeJson(res, 200, { reachable: false });
+    }
+}
+
+
+async function handleRvmToGlb(req, res) {
+    if (req.method === 'OPTIONS') {
+        res.writeHead(204, {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+            'Cache-Control': 'no-store',
+        });
+        res.end();
+        return;
+    }
+
+    if (req.method !== 'POST') {
+        writeJson(res, 405, { ok: false, error: 'Method not allowed. Use POST.' });
+        return;
+    }
+
+    const parserExe = detectRvmParserBinary();
+    if (!parserExe) {
+        writeJson(res, 500, { ok: false, error: 'Native rvmparser not found.' });
+        return;
+    }
+
+    let body;
+    try {
+        body = await parseJsonBody(req);
+    } catch (error) {
+        writeJson(res, 400, { ok: false, error: error.message });
+        return;
+    }
+
+    const inputName = sanitizeFileName(body?.inputName, 'input.rvm');
+    const inputBase64 = String(body?.inputBase64 || '');
+    if (!inputBase64) {
+        writeJson(res, 400, { ok: false, error: 'inputBase64 is required.' });
+        return;
+    }
+
+    const attributesName = sanitizeFileName(body?.attributesName, 'attributes.att');
+    const attributesBase64 = String(body?.attributesBase64 || '');
+
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rvm-glb-'));
+    try {
+        const inputPath = path.join(tempRoot, inputName);
+        fs.writeFileSync(inputPath, Buffer.from(inputBase64, 'base64'));
+
+        let attributesPath = null;
+        if (attributesBase64) {
+            attributesPath = path.join(tempRoot, attributesName);
+            fs.writeFileSync(attributesPath, Buffer.from(attributesBase64, 'base64'));
+        }
+
+        const stem = path.parse(inputName).name || 'output';
+
+        // Use the invocation builder
+        const { buildRvmInvocation } = await import('./viewer/converters/rvm-invocation-builder-rvm.js');
+        const invocation = buildRvmInvocation(inputPath, inputName, attributesPath, tempRoot);
+
+        const args = invocation.argv;
+        const glbPath = invocation.glbOutputPath;
+        const jsonPath = invocation.jsonOutputPath;
+
+        const execution = await runProcess(parserExe, args, tempRoot);
+        const stdoutLines = splitLines(execution.stdout);
+        const stderrLines = splitLines(execution.stderr);
+
+        if (execution.error || execution.code !== 0) {
+            writeJson(res, 500, {
+                ok: false,
+                error: `Converter failed: ${execution.error?.message || 'code ' + execution.code}`,
+                logs: { stdout: stdoutLines, stderr: stderrLines, argv: args }
+            });
+            return;
+        }
+
+        if (!fileExists(glbPath)) {
+            writeJson(res, 500, { ok: false, error: 'GLB file not produced.' });
+            return;
+        }
+
+        let indexText = '{}';
+        const indexName = `${stem}.index.json`;
+
+        if (fileExists(jsonPath)) {
+           const indexPath = path.join(tempRoot, indexName);
+           const bundleId = `bundle-${Date.now()}`;
+           const postProcess = await runProcess(process.execPath, [path.join(__dirname, 'tools', 'gen-rvm-index.js'), jsonPath, indexPath, bundleId], tempRoot);
+           if (postProcess.code === 0 && fileExists(indexPath)) {
+               indexText = fs.readFileSync(indexPath, 'utf8');
+           } else {
+               const ppStderr = splitLines(postProcess.stderr);
+               writeJson(res, 500, { ok: false, error: 'Post-processor failed', logs: { stdout: [], stderr: ppStderr, argv: [] } });
+               return;
+           }
+        }
+
+        const glbBase64 = fs.readFileSync(glbPath).toString('base64');
+
+        writeJson(res, 200, {
+            ok: true,
+            glbName: invocation.glbOutputName,
+            glbBase64,
+            indexName,
+            indexText,
+            logs: { stdout: stdoutLines, stderr: stderrLines, argv: args }
+        });
+    } catch (error) {
+        writeJson(res, 500, { ok: false, error: error.message });
+    } finally {
+        safeCleanup(tempRoot);
     }
 }
 
@@ -246,6 +376,14 @@ function resolveRequestPath(urlPath) {
 
 http.createServer(async (req, res) => {
     const cleanPath = String(req.url || '/').split('?')[0];
+    if (cleanPath === '/api/native/rvm-to-glb-probe') {
+        await handleRvmToGlbProbe(req, res);
+        return;
+    }
+    if (cleanPath === '/api/native/rvm-to-glb') {
+        await handleRvmToGlb(req, res);
+        return;
+    }
     if (cleanPath === NATIVE_RVM_API_PATH) {
         await handleNativeRvmToRev(req, res);
         return;
