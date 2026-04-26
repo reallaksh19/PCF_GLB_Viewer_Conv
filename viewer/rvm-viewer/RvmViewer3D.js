@@ -87,6 +87,8 @@ export class RvmViewer3D {
     // ── Model Loading ──────────────────────────────────────────────────
 
     // We assume the model loaded is a Three.js Group/Object3D.
+
+    // We assume the model loaded is a Three.js Group/Object3D.
     // And coordinate system normalization based on upAxis.
     setModel(model, upAxis = 'Y') {
         this.modelGroup.clear();
@@ -106,6 +108,7 @@ export class RvmViewer3D {
         this.visibility.updateModelGroup(this.modelGroup);
         this.selection.updateModelGroup(this.modelGroup);
 
+
         this.fitAll();
     }
 
@@ -114,6 +117,7 @@ export class RvmViewer3D {
         const width = this.container.clientWidth;
         const height = this.container.clientHeight;
         if (width === 0 || height === 0) return;
+
 
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
@@ -124,6 +128,7 @@ export class RvmViewer3D {
     _animate() {
         if (this._disposed) return;
         this._animationFrameId = requestAnimationFrame(this._animate);
+
 
         this.controls.update();
         this.renderer.render(this.scene, this.camera);
@@ -221,6 +226,7 @@ export class RvmViewer3D {
 
         this.controls.target.copy(center);
 
+
         switch(preset) {
             case 'TOP': this.camera.position.set(center.x, center.y + dist, center.z); break;
             case 'BOTTOM': this.camera.position.set(center.x, center.y - dist, center.z); break;
@@ -230,6 +236,7 @@ export class RvmViewer3D {
             case 'RIGHT': this.camera.position.set(center.x + dist, center.y, center.z); break;
             case 'ISO_SE': this.camera.position.set(center.x + dist, center.y + dist, center.z + dist); break;
         }
+
 
         this.camera.lookAt(center);
         this.controls.update();
@@ -310,6 +317,7 @@ export class RvmViewer3D {
         this._disposed = true;
         cancelAnimationFrame(this._animationFrameId);
 
+
         if (this._resizeObserver) {
             this._resizeObserver.disconnect();
             this._resizeObserver = null;
@@ -336,6 +344,7 @@ export class RvmViewer3D {
         this.controls.dispose();
         this.renderer.dispose();
 
+
         if (this.renderer.domElement.parentNode) {
             this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
         }
@@ -346,6 +355,7 @@ export class RvmViewer3D {
         this.sectioning.dispose();
         this.visibility.dispose();
         this.selection.dispose();
+
 
         // Nullify internal refs
         this.scene = null;

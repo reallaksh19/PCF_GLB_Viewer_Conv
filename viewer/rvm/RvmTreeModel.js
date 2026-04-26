@@ -3,6 +3,7 @@ export class RvmTreeModel {
         this.rvmIndex = rvmIndex;
         this.viewerContext = viewerContext; // needs { viewer: RvmViewer3D }
 
+
         this._rootNodes = [];
         this._treeMap = new Map(); // canonicalId -> tree node obj
     }
@@ -67,6 +68,7 @@ export class RvmTreeModel {
 
         const labelDiv = document.createElement('div');
         labelDiv.className = 'rvm-tree-label';
+
 
         // If it has children, add a toggle
         if (treeNode.children.length > 0) {

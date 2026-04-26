@@ -27,6 +27,7 @@ export class RvmSearchIndex {
                 for (; current < end; current++) {
                     const node = nodes[current];
 
+
                     // Build a concatenated searchable string for this node
                     let searchableText = [
                         node.sourceObjectId || '',

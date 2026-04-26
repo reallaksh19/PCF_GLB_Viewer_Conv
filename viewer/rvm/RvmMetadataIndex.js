@@ -3,6 +3,7 @@ export class RvmMetadataIndex {
         this.rvmIndex = rvmIndex;
         this.identityMap = identityMap;
 
+
         // Build a lookup for fast node access by canonicalObjectId
         this._nodesByCanonicalId = new Map();
         if (this.rvmIndex && this.rvmIndex.nodes) {
@@ -49,6 +50,7 @@ export class RvmMetadataIndex {
 
         const table = document.createElement('table');
         table.className = 'rvm-attr-table';
+
 
         const tbody = document.createElement('tbody');
 

@@ -58,6 +58,7 @@ function runTests() {
     }
 
     // Now test REAL RvmViewer3D instances but mocking container and geometry
+    // Now test REAL RvmViewer3D instances but mocking container and geometry
     // to avoid headless browser limits in Node
     console.log("--- Testing RvmViewer3D methods ---");
 
@@ -141,6 +142,7 @@ function runTests() {
         domElement: { style: {}, parentNode: { removeChild: () => {} } },
         setSize: () => {}, render: () => {}
     };
+
 
     // Test: dispose() nullifies all internal refs
     viewer.dispose();
