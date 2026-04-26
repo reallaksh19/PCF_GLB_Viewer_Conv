@@ -212,6 +212,21 @@ export const state = {
 
   // Dedicated 3D Viewer config (new)
   viewer3DConfig: _clone(DEFAULT_VIEWER3D_CONFIG),
+
+  // RVM Viewer tab state
+  rvm: {
+    deploymentMode: 'static',
+    capabilities: null,
+    activeBundle: null,
+    manifest: null,
+    index: null,
+    identityMap: null,
+    tags: [],
+    selection: { canonicalObjectId: null, renderObjectIds: [] },
+    savedViews: [],
+    diagnostics: [],
+    asyncLoad: { loadId: null, status: 'idle', phase: null, progress: 0, error: null },
+  },
 };
 
 export function resetParsedState() {
@@ -259,6 +274,16 @@ export function loadStickyState() {
       state.viewer3DConfig = _clone(DEFAULT_VIEWER3D_CONFIG);
       _migrateLegacyViewerSettingsToViewer3DConfig(legacyViewerObj, state.viewer3DConfig);
     }
+
+    const savedRvm = localStorage.getItem('viewer3d_rvm_v1');
+    if (savedRvm) {
+      const parsedRvm = JSON.parse(savedRvm);
+      if (parsedRvm && typeof parsedRvm === 'object') {
+        if (parsedRvm.deploymentMode) state.rvm.deploymentMode = parsedRvm.deploymentMode;
+        if (Array.isArray(parsedRvm.savedViews)) state.rvm.savedViews = parsedRvm.savedViews;
+        if (Array.isArray(parsedRvm.tags)) state.rvm.tags = parsedRvm.tags;
+      }
+    }
   } catch (e) {
     // keep defaults
     state.sticky.pcfxDefaults = _clone(DEFAULT_PCFX_DEFAULTS);
@@ -270,6 +295,12 @@ export function saveStickyState() {
     localStorage.setItem('concise-viewer-sticky', JSON.stringify(state.sticky));
     localStorage.setItem('viewer3d_settings', JSON.stringify(state.viewerSettings));
     localStorage.setItem('viewer3d_config_v2', JSON.stringify(state.viewer3DConfig));
+    const rvmPersist = {
+      deploymentMode: state.rvm.deploymentMode,
+      savedViews: state.rvm.savedViews,
+      tags: state.rvm.tags,
+    };
+    localStorage.setItem('viewer3d_rvm_v1', JSON.stringify(rvmPersist));
   } catch (e) {
     // no-op
   }

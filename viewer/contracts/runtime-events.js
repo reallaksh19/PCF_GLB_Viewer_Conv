@@ -31,7 +31,13 @@ export const RuntimeEvents = Object.freeze({
   INTERCHANGE_DIAGNOSTIC: 'interchange-diagnostic',
   MODEL_CONVERTER_START: 'model-converter-start',
   MODEL_CONVERTER_SUCCESS: 'model-converter-success',
-  MODEL_CONVERTER_ERROR: 'model-converter-error'
+  MODEL_CONVERTER_ERROR: 'model-converter-error',
+  RVM_MODEL_LOADED: 'rvm-model-loaded',
+  RVM_NODE_SELECTED: 'rvm-node-selected',
+  RVM_TAG_CREATED: 'rvm-tag-created',
+  RVM_TAG_DELETED: 'rvm-tag-deleted',
+  RVM_SEARCH_CHANGED: 'rvm-search-changed',
+  RVM_CONFIG_CHANGED: 'rvm-config-changed',
 });
 
 const _validEvents = new Set(Object.values(RuntimeEvents));

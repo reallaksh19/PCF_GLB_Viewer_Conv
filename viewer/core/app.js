@@ -1,6 +1,7 @@
 import { loadStickyState, state, setActiveTab } from './state.js';
 import { RuntimeEvents } from '../contracts/runtime-events.js';
 import { renderViewer3D } from '../tabs/viewer3d-tab.js';
+import { renderViewer3DRvm } from '../tabs/viewer3d-rvm-tab.js';
 import { renderAdvancedGlbViewerPanel } from '../js/pcf2glb/ui/AdvancedGlbViewerPanel.js';
 import { renderPcfxConverterTab } from '../tabs/pcfx-converter-tab.js';
 import { renderModelExchangeTab } from '../tabs/model-exchange-tab.js';
@@ -15,6 +16,7 @@ const IS_DEV = window.location.hostname === 'localhost' || window.location.hostn
 
 const TABS = [
   { id: 'viewer3d', label: '3D Viewer', render: renderViewer3D },
+  { id: 'viewer3d-rvm', label: '3D RVM Viewer', render: renderViewer3DRvm },
   ...(IS_DEV ? [{ id: 'adv-glb', label: 'Advanced GLB Viewer', render: renderAdvancedGlbViewerPanel }] : []),
   { id: 'pcfx-converter', label: 'PCF<->PCFX<->GLB', render: renderPcfxConverterTab },
   { id: 'model-exchange', label: 'Model Exchange', render: renderModelExchangeTab },
