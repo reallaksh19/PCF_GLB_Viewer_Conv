@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-      - run: mkdir -p site && cp index.html site/ && cp -R viewer site/viewer
+      - run: mkdir -p site && cp index.html site/ && cp favicon.svg site/ && cp -R viewer site/viewer
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
