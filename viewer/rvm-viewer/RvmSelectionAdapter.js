@@ -9,6 +9,9 @@ export class RvmSelectionAdapter {
         this.selectedMeshes = [];
         this.selectedOriginalEmissives = new Map(); // mesh -> color
 
+        this.searchMeshes = [];
+        this.searchOriginalEmissives = new Map();
+
         this.isActive = true;
 
         this._raycaster = new THREE.Raycaster();
@@ -77,7 +80,12 @@ export class RvmSelectionAdapter {
                 this.selectedMeshes.push(obj);
 
                 if (obj.material && obj.material.emissive) {
-                    this.selectedOriginalEmissives.set(obj, obj.material.emissive.getHex());
+                    if (!this.selectedOriginalEmissives.has(obj)) {
+                        const original = this.searchOriginalEmissives.has(obj)
+                            ? this.searchOriginalEmissives.get(obj)
+                            : obj.material.emissive.getHex();
+                        this.selectedOriginalEmissives.set(obj, original);
+                    }
                     obj.material.emissive.setHex(0x2244cc);
                 }
             }
@@ -90,13 +98,61 @@ export class RvmSelectionAdapter {
         if (this.selectedMeshes.length > 0) {
             for (const mesh of this.selectedMeshes) {
                 if (mesh.material && mesh.material.emissive && this.selectedOriginalEmissives.has(mesh)) {
-                    mesh.material.emissive.setHex(this.selectedOriginalEmissives.get(mesh));
+                    if (this.searchMeshes.includes(mesh)) {
+                        mesh.material.emissive.setHex(0x884400);
+                    } else {
+                        mesh.material.emissive.setHex(this.selectedOriginalEmissives.get(mesh));
+                    }
                 }
             }
         }
         this.selectedMeshes = [];
         this.selectedOriginalEmissives.clear();
         this.selectedCanonicalId = null;
+    }
+
+    highlightSearchResults(canonicalIds) {
+        this.clearSearchHighlights();
+
+        if (!canonicalIds || canonicalIds.length === 0) return;
+
+        const renderIdSet = new Set();
+        if (this.viewer._identityMap) {
+            for (const id of canonicalIds) {
+                const rIds = this.viewer._identityMap.renderIdsFromCanonical(id);
+                if (rIds) rIds.forEach(r => renderIdSet.add(r));
+            }
+        }
+
+        if (renderIdSet.size === 0) return;
+
+        this.viewer._componentGroup.traverse((obj) => {
+            if (obj.isMesh && obj.userData && obj.userData.renderObjectId && renderIdSet.has(obj.userData.renderObjectId)) {
+                this.searchMeshes.push(obj);
+
+                if (obj.material && obj.material.emissive) {
+                    if (!this.searchOriginalEmissives.has(obj) && !this.selectedOriginalEmissives.has(obj)) {
+                        this.searchOriginalEmissives.set(obj, obj.material.emissive.getHex());
+                    }
+
+                    if (!this.selectedMeshes.includes(obj)) {
+                        obj.material.emissive.setHex(0x884400);
+                    }
+                }
+            }
+        });
+    }
+
+    clearSearchHighlights() {
+        if (this.searchMeshes.length > 0) {
+            for (const mesh of this.searchMeshes) {
+                if (!this.selectedMeshes.includes(mesh) && mesh.material && mesh.material.emissive && this.searchOriginalEmissives.has(mesh)) {
+                    mesh.material.emissive.setHex(this.searchOriginalEmissives.get(mesh));
+                }
+            }
+        }
+        this.searchMeshes = [];
+        this.searchOriginalEmissives.clear();
     }
 
     getSelectedCanonicalId() {
@@ -123,5 +179,6 @@ export class RvmSelectionAdapter {
              this.viewer.renderer.domElement.removeEventListener('pointerdown', this._onPointerDown);
         }
         this.clearSelection();
+        this.clearSearchHighlights();
     }
 }
