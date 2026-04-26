@@ -5,3 +5,4 @@ package-lock.json
 test_screenshot_piping2.js
 piping_iso_theme2.png
 .claude/
+viewer/converters/bin/
