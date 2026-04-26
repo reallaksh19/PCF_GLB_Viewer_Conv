@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
 import { RvmSectioning } from './RvmSectioning.js';
 import { RvmVisibilityController } from './RvmVisibilityController.js';
@@ -304,6 +304,63 @@ export class RvmViewer3D {
             isolatedCanonicalObjectIds: this.visibility.getIsolatedCanonicalIds(),
             selectedCanonicalObjectId: this.selection.getSelectedCanonicalId()
         };
+    }
+
+    getCameraState() {
+        return {
+            position: this.camera.position.clone(),
+            target: this.controls.target.clone()
+        };
+    }
+
+    setCameraState(state) {
+        if (!state) return;
+        if (state.position) this.camera.position.copy(state.position);
+        if (state.target) this.controls.target.copy(state.target);
+        this.controls.update();
+    }
+
+    addTag(tag) {
+        if (!tag || !tag.worldPosition) return;
+        const div = document.createElement('div');
+        div.className = 'rvm-tag-label';
+        div.textContent = tag.text || tag.id;
+        div.dataset.tagId = tag.id;
+
+        // Use global CSS2DObject constructor if available, else omit (e.g. headless tests)
+        if (typeof CSS2DObject !== 'undefined') {
+            const label = new CSS2DObject(div);
+            label.position.set(tag.worldPosition.x, tag.worldPosition.y, tag.worldPosition.z);
+            label.name = `TAG_${tag.id}`;
+            this.scene.add(label);
+        } else if (window.THREE && window.THREE.CSS2DObject) {
+            const label = new window.THREE.CSS2DObject(div);
+            label.position.set(tag.worldPosition.x, tag.worldPosition.y, tag.worldPosition.z);
+            label.name = `TAG_${tag.id}`;
+            this.scene.add(label);
+        } else {
+            // Stub for node environments
+            const label = new THREE.Object3D();
+            label.position.set(tag.worldPosition.x, tag.worldPosition.y, tag.worldPosition.z);
+            label.name = `TAG_${tag.id}`;
+            label.isCSS2DObject = true;
+            this.scene.add(label);
+        }
+    }
+
+    removeTag(tagId) {
+        const obj = this.scene.getObjectByName(`TAG_${tagId}`);
+        if (obj) {
+            this.scene.remove(obj);
+        }
+    }
+
+    jumpToTag(tagId) {
+        if (!this.tagStore) return;
+        const tag = this.tagStore.getTag(tagId);
+        if (tag && tag.cameraState) {
+            this.setCameraState(tag.cameraState);
+        }
     }
 
     dispose() {

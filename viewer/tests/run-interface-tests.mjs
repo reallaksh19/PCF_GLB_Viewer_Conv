@@ -18,6 +18,8 @@ const tests = [
   './unit/rvm/rvm-capabilities.test.js',
   './integration/rvm-tab-shell.test.js',
   './integration/rvm-load-pipeline.test.js',
+  './unit/rvm/rvm-tag-xml.test.js',
+  './unit/rvm/rvm-saved-views.test.js',
 ];
 
 for (const rel of tests) {
