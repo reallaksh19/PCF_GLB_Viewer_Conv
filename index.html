@@ -4,19 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PCF-GLB-3D viewer</title>
-  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="icon" type="image/svg+xml" href="viewer/favicon.svg">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="styles/base.css">
-  <link rel="stylesheet" href="styles/tabs.css">
-  <link rel="stylesheet" href="styles/tables.css">
-  <link rel="stylesheet" href="styles/debug.css">
-  <link rel="stylesheet" href="styles/viewer3d.css">
-  <link rel="stylesheet" href="styles/print.css">
-  <link rel="stylesheet" href="tabs/model-exchange-tab.css">
-  <link rel="stylesheet" href="tabs/interchange-config-tab.css">
-  <link rel="stylesheet" href="tabs/model-converters-tab.css">
-  <link rel="stylesheet" href="tabs/viewer3d-rvm-tab.css">
+  <link rel="stylesheet" href="viewer/styles/base.css">
+  <link rel="stylesheet" href="viewer/styles/tabs.css">
+  <link rel="stylesheet" href="viewer/styles/tables.css">
+
+  <link rel="stylesheet" href="viewer/styles/debug.css">
+  <link rel="stylesheet" href="viewer/styles/viewer3d.css">
+  <link rel="stylesheet" href="viewer/styles/print.css">
+  <link rel="stylesheet" href="viewer/tabs/model-exchange-tab.css">
+  <link rel="stylesheet" href="viewer/tabs/interchange-config-tab.css">
+  <link rel="stylesheet" href="viewer/tabs/model-converters-tab.css">
 
   <!-- Import map - CDN libraries, no build step required -->
   <script type="importmap">
@@ -54,7 +54,7 @@
 <div class="print-only" id="print-sections-extra"></div>
 
 <script type="module">
-  import { init } from './core/app.js';
+  import { init } from './viewer/core/app.js';
   init().catch((error) => {
     console.error('Viewer bootstrap failed.', error);
   });
