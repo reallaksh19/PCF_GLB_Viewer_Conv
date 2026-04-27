@@ -3,6 +3,7 @@ import { state, saveStickyState } from '../core/state.js';
 import { on, emit } from '../core/event-bus.js';
 import { detectRvmCapabilities } from '../rvm/RvmCapabilities.js';
 import { notify } from '../diagnostics/notification-center.js';
+import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js';
 
 let _viewer = null;
 let _shortcutHandler = null;
@@ -226,7 +227,13 @@ function _bindTabListener() {
   const off = on(RuntimeEvents.TAB_CHANGED, ({ tabId }) => {
     if (tabId !== 'viewer3d-rvm') _disposeRvmViewer();
   });
-  _capabilitiesListenerOff = off;
+  const offLoad = on(RuntimeEvents.RVM_MODEL_LOADED, (payload) => {
+    if (_viewer && payload && payload.gltf && payload.gltf.scene) {
+        _viewer.setModel(payload.gltf.scene, payload.manifest?.runtime?.upAxis);
+        _viewer.fitAll();
+    }
+  });
+  _capabilitiesListenerOff = () => { off(); offLoad(); };
 }
 
 // ── Public render function ─────────────────────────────────────────────────
@@ -246,13 +253,57 @@ export function renderViewer3DRvm(container) {
   _bindShortcuts(container);
   _bindTabListener();
 
-  // Initialise viewer stub (replaced by RvmViewer3D in Agent 3)
-  _viewer = _createViewerStub(container);
+  // Initialize the actual RvmViewer3D instance inside the viewport container
+  const viewport = container.querySelector('.rvm-viewport');
+  if (viewport) {
+      viewport.innerHTML = '';
+      _viewer = new RvmViewer3D(viewport, { identityMap: state.rvm.identityMap });
+  }
 
   // Async capability probe — update banner once resolved
   detectRvmCapabilities(null).then((resolvedCaps) => {
     state.rvm.capabilities = resolvedCaps;
     _renderCapabilityBanner(container, resolvedCaps);
+
+    // If assisted mode is resolved later, we need to update the HTML to show the raw import button
+    if (resolvedCaps.deploymentMode === 'assisted' && !container.querySelector('#rvm-raw-file-input')) {
+        const ribbon = container.querySelector('.rvm-ribbon-section');
+        if (ribbon) {
+            ribbon.innerHTML += `
+              <label class="rvm-btn rvm-btn-file rvm-btn-assisted" title="Upload raw .rvm for conversion">
+                ${UPLOAD_ICON}<span>Load RVM</span>
+                <input type="file" id="rvm-raw-file-input" accept=".rvm" style="display:none">
+              </label>
+            `;
+            // Bind the newly added raw input
+            const rawInput = container.querySelector('#rvm-raw-file-input');
+            if (rawInput) {
+                rawInput.addEventListener('change', async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    emit(RuntimeEvents.FILE_LOADED, {
+                        name: file.name,
+                        source: 'rvm-tab',
+                        payload: file
+                    });
+                });
+            }
+        }
+    }
+
+    // Ensure raw input is bound if it exists (e.g., if injected by test or actual assisted deployment)
+    const rawInput = container.querySelector('#rvm-raw-file-input');
+    if (rawInput) {
+        rawInput.addEventListener('change', async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            emit(RuntimeEvents.FILE_LOADED, {
+                name: file.name,
+                source: 'rvm-tab',
+                payload: file
+            });
+        });
+    }
   });
 
   return _disposeRvmViewer;

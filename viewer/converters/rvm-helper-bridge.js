@@ -117,6 +117,7 @@ export class RvmHelperBridge {
             return await ctx.staticBundleLoader.load({
                 schemaVersion: 'rvm-bundle/v1',
                 bundleId,
+                runtime: { units: 'mm', upAxis: 'Y', scale: 1, originOffset: [0, 0, 0] },
                 artifacts: {
                     glb: glbUrl,
                     index: indexUrl

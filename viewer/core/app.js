@@ -7,8 +7,11 @@ import { renderPcfxConverterTab } from '../tabs/pcfx-converter-tab.js';
 import { renderModelExchangeTab } from '../tabs/model-exchange-tab.js';
 import { renderInterchangeConfigTab } from '../tabs/interchange-config-tab.js';
 import { renderModelConvertersTab } from '../tabs/model-converters-tab.js';
-import { emit } from './event-bus.js';
+import { emit, on } from './event-bus.js';
 import { initDevDebugWindow, destroyDevDebugWindow } from '../debug/dev-debug-window.js';
+import { loadRvmSource } from '../rvm/RvmLoadPipeline.js';
+import { RvmStaticBundleLoader } from '../rvm/RvmStaticBundleLoader.js';
+import { RvmHelperBridge } from '../converters/rvm-helper-bridge.js';
 
 const TAB_CONFIG_URL = './opt/tab-visibility.json';
 
@@ -36,10 +39,35 @@ export async function init() {
   _visibleTabs = await _loadVisibleTabs();
   _buildTabBar();
   _bindAppSwitchHandler();
+  _bindGlobalEvents();
   if (IS_DEV) {
     initDevDebugWindow();
   }
   _switchTab(_resolveInitialTabId());
+}
+
+function _bindGlobalEvents() {
+  on(RuntimeEvents.FILE_LOADED, async (payload) => {
+    if (payload.source === 'rvm-tab') {
+      try {
+        // Fallback to local assisted mode configuration if capabilities are unpopulated or static
+        let caps = state.rvm?.capabilities;
+        if (!caps || !caps.rawRvmImport) {
+             caps = { rawRvmImport: true, deploymentMode: 'assisted' };
+        }
+
+        const ctx = {
+          capabilities: caps,
+          staticBundleLoader: new RvmStaticBundleLoader(),
+          assistedBridge: new RvmHelperBridge()
+        };
+
+        await loadRvmSource({ kind: 'raw-rvm', file: payload.payload }, ctx);
+      } catch (err) {
+        console.error('RVM Load Pipeline failed:', err);
+      }
+    }
+  });
 }
 
 function _bindAppSwitchHandler() {

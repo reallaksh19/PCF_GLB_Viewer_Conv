@@ -130,13 +130,6 @@ async function handleNativeRvmToRev(req, res) {
     }
 
     const parserExe = detectRvmParserBinary();
-    if (!parserExe) {
-        writeJson(res, 500, {
-            ok: false,
-            error: 'Native rvmparser-windows-bin.exe not found. Install it at C:\\Code3\\rvmparser or next to the server script.',
-        });
-        return;
-    }
 
     let body;
     try {
@@ -155,6 +148,14 @@ async function handleNativeRvmToRev(req, res) {
 
     const attributesName = sanitizeFileName(body?.attributesName, 'attributes.att');
     const attributesBase64 = String(body?.attributesBase64 || '');
+
+    if (!parserExe) {
+        writeJson(res, 500, {
+            ok: false,
+            error: 'Native rvmparser-windows-bin.exe not found. Install it at C:\\Code3\\rvmparser or next to the server script.',
+        });
+        return;
+    }
 
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pcfglb-rvm-'));
     try {
