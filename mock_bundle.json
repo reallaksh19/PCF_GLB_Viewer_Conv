@@ -1,8 +1,0 @@
-{
-  "bundleId": "bundle-123",
-  "schemaVersion": "1.0.0",
-  "modelClass": "single-bundle",
-  "artifacts": {
-    "glb": "test.glb"
-  }
-}
