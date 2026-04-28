@@ -23,7 +23,12 @@ export class RvmStaticBundleLoader {
     asyncSession.update('manifest', 5);
     let manifest;
     try {
-      manifest = parseBundleManifest(inputBundle);
+      // If input is a File object, read it as text first
+      let manifestText = inputBundle;
+      if (inputBundle instanceof File) {
+          manifestText = await inputBundle.text();
+      }
+      manifest = parseBundleManifest(manifestText);
     } catch (err) {
       throw err;
     }

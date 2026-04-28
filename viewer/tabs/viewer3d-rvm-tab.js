@@ -88,17 +88,12 @@ function _bindBundleLoader(container) {
   input.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    try {
-      const text = await file.text();
-      const json = JSON.parse(text);
-      state.rvm.manifest = json;
-      state.rvm.activeBundle = json.bundleId || null;
-      saveStickyState();
-      emit(RuntimeEvents.RVM_CONFIG_CHANGED, { reason: 'bundle-loaded' });
-      notify({ type: 'info', message: `RVM bundle loaded: ${json.bundleId || file.name}` });
-    } catch (err) {
-      notify({ type: 'error', message: `Failed to load bundle manifest: ${err.message}` });
-    }
+    emit(RuntimeEvents.FILE_LOADED, {
+        name: file.name,
+        source: 'rvm-tab',
+        payload: file,
+        kind: 'bundle'
+    });
   });
 }
 
@@ -276,38 +271,51 @@ export function renderViewer3DRvm(container) {
     if (resolvedCaps.deploymentMode === 'assisted' && !container.querySelector('#rvm-raw-file-input')) {
         const ribbon = container.querySelector('.rvm-ribbon-section');
         if (ribbon) {
-            ribbon.innerHTML += `
-              <label class="rvm-btn rvm-btn-file rvm-btn-assisted" title="Upload raw .rvm for conversion">
-                ${UPLOAD_ICON}<span>Load RVM</span>
-                <input type="file" id="rvm-raw-file-input" accept=".rvm" style="display:none">
-              </label>
-            `;
+            // Use DOM manipulation instead of innerHTML to avoid stripping existing event listeners
+            const label = document.createElement('label');
+            label.className = 'rvm-btn rvm-btn-file rvm-btn-assisted';
+            label.title = 'Upload raw .rvm for conversion';
+
+            const span = document.createElement('span');
+            span.textContent = 'Load RVM';
+
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.id = 'rvm-raw-file-input';
+            input.accept = '.rvm';
+            input.style.display = 'none';
+
+            label.innerHTML = UPLOAD_ICON;
+            label.appendChild(span);
+            label.appendChild(input);
+
+            ribbon.appendChild(label);
+
             // Bind the newly added raw input
-            const rawInput = container.querySelector('#rvm-raw-file-input');
-            if (rawInput) {
-                rawInput.addEventListener('change', async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    emit(RuntimeEvents.FILE_LOADED, {
-                        name: file.name,
-                        source: 'rvm-tab',
-                        payload: file
-                    });
+            input.addEventListener('change', async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                emit(RuntimeEvents.FILE_LOADED, {
+                    name: file.name,
+                    source: 'rvm-tab',
+                    payload: file,
+                    kind: 'raw-rvm'
                 });
-            }
+            });
         }
     }
 
     // Ensure raw input is bound if it exists (e.g., if injected by test or actual assisted deployment)
-    const rawInput = container.querySelector('#rvm-raw-file-input');
-    if (rawInput) {
-        rawInput.addEventListener('change', async (e) => {
+    const existingRawInput = container.querySelector('#rvm-raw-file-input');
+    if (existingRawInput) {
+        existingRawInput.addEventListener('change', async (e) => {
             const file = e.target.files?.[0];
             if (!file) return;
             emit(RuntimeEvents.FILE_LOADED, {
                 name: file.name,
                 source: 'rvm-tab',
-                payload: file
+                payload: file,
+                kind: 'raw-rvm'
             });
         });
     }
