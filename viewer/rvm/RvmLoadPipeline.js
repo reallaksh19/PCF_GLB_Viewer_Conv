@@ -2,6 +2,7 @@ import { state } from '../core/state.js';
 import { RvmDiagnostics } from './RvmDiagnostics.js';
 import { emit } from '../core/event-bus.js';
 import { RuntimeEvents } from '../contracts/runtime-events.js';
+import { AvevaJsonLoader } from './AvevaJsonLoader.js';
 
 /**
  * Tracks an active load session to prevent race conditions and partial state leaks.
@@ -106,6 +107,11 @@ export async function loadRvmSource(input, ctx) {
   try {
     if (input.kind === 'bundle') {
       return await ctx.staticBundleLoader.load(input.bundle, ctx, asyncSession);
+    }
+
+    if (input.kind === 'aveva-json') {
+      const loader = new AvevaJsonLoader();
+      return await loader.load(input.data, ctx, asyncSession);
     }
 
     if (input.kind === 'raw-rvm') {

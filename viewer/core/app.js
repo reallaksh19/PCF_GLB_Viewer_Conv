@@ -93,9 +93,14 @@ function _bindGlobalEvents() {
           assistedBridge: activeBridge
         };
 
-        const loadPayload = payload.kind === 'bundle'
-            ? { kind: 'bundle', bundle: payload.payload }
-            : { kind: 'raw-rvm', file: payload.payload };
+        let loadPayload;
+        if (payload.kind === 'bundle') {
+            loadPayload = { kind: 'bundle', bundle: payload.payload };
+        } else if (payload.kind === 'aveva-json') {
+            loadPayload = { kind: 'aveva-json', data: payload.payload };
+        } else {
+            loadPayload = { kind: 'raw-rvm', file: payload.payload };
+        }
 
         await loadRvmSource(loadPayload, ctx);
       } catch (err) {

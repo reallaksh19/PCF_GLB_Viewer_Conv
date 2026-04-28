@@ -88,12 +88,31 @@ function _bindBundleLoader(container) {
   input.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    emit(RuntimeEvents.FILE_LOADED, {
-        name: file.name,
-        source: 'rvm-tab',
-        payload: file,
-        kind: 'bundle'
-    });
+
+    try {
+        const text = await file.text();
+        const json = JSON.parse(text);
+
+        if (Array.isArray(json)) {
+            // It's a raw AVEVA hierarchy dump
+            emit(RuntimeEvents.FILE_LOADED, {
+                name: file.name,
+                source: 'rvm-tab',
+                payload: json,
+                kind: 'aveva-json'
+            });
+        } else {
+            // Standard .bundle.json manifest
+            emit(RuntimeEvents.FILE_LOADED, {
+                name: file.name,
+                source: 'rvm-tab',
+                payload: json,
+                kind: 'bundle'
+            });
+        }
+    } catch (err) {
+        notify({ type: 'error', message: `Failed to parse JSON file: ${err.message}` });
+    }
   });
 }
 
