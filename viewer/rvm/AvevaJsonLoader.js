@@ -85,25 +85,107 @@ export class AvevaJsonLoader {
 
             // For Aveva dumps, components like PIPEs have bboxes, and their children (BRANCHes) have bboxes, and their children (ELBOWs, FLANGEs) have bboxes.
             // Typically, we only want the leaf components. Let's just render the leaf components as solid.
-            if (isLeaf) {
-                const geometry = new THREE.BoxGeometry(w, h, d);
-                const material = getMaterial(element.material || 1);
-                const mesh = new THREE.Mesh(geometry, material);
+            // Also render PIPEs and BRANCHes themselves if they represent large straight sections,
+            // but in the provided JSON, BRANCHes contain ELBOWs, FLANGEs, TEEs (the fittings).
+            // The straight sections are usually gaps between the fittings in the tree.
+            // To represent the full topo, we should render the BRANCH/PIPE bounding boxes as thin wireframes or semi-transparent cylinders!
 
-                // Position at center of bbox
-                mesh.position.set(
-                    minX + width / 2,
-                    minY + height / 2,
-                    minZ + depth / 2
-                );
+            // Let's render everything that has a bbox, but use opacity for containers
+            let geometry;
+            let material = getMaterial(element.material || 1);
+            const n = name.toUpperCase();
 
-                mesh.userData = { name: currentPath };
-                mesh.name = currentPath;
-                mesh.uuid = THREE.MathUtils.generateUUID();
+            let isContainer = !isLeaf;
 
-                group.add(mesh);
-                nodeRecord.renderObjectIds.push(mesh.name);
+            if (isContainer) {
+                // For Pipes and Branches, render a very thin cylinder across their longest dimension to show connectivity
+                if (n.includes('PIPE') || n.includes('BRANCH')) {
+                    const maxDim = Math.max(w, h, d);
+                    const radius = 0.05; // Thin line
+                    geometry = new THREE.CylinderGeometry(radius, radius, maxDim, 8);
+                    material = new THREE.MeshStandardMaterial({ color: 0x3d74c5, transparent: true, opacity: 0.5 });
+                } else {
+                    // Other containers: wireframe box
+                    geometry = new THREE.BoxGeometry(w, h, d);
+                    material = new THREE.MeshBasicMaterial({ color: 0x888888, wireframe: true, transparent: true, opacity: 0.2 });
+                }
+            } else {
+
+                // Determine shape based on naming convention heuristics
+                if (n.includes('ELBOW') || n.includes('TEE') || n.includes('OLET') || n.includes('CROSS')) {
+                    // Pipes/fittings: create a generic cylinder to represent them better than a box
+                    // The longest dimension of the bbox is typically the pipe length
+                    const maxDim = Math.max(w, h, d);
+                    const radius = Math.min(w, h, d) / 2 || 0.1;
+                    geometry = new THREE.CylinderGeometry(radius, radius, maxDim, 16);
+
+                    // Color code fittings
+                    if (n.includes('ELBOW') || n.includes('BEND')) material = new THREE.MeshStandardMaterial({ color: 0xaa55aa });
+                    else if (n.includes('TEE') || n.includes('OLET')) material = new THREE.MeshStandardMaterial({ color: 0x55aa55 });
+                    else if (n.includes('CROSS')) material = new THREE.MeshStandardMaterial({ color: 0x44aa88 });
+                }
+                else if (n.includes('VALVE')) {
+                    // Valves: represent as a sphere or slightly larger cylinder
+                    const radius = Math.max(w, h, d) / 2;
+                    geometry = new THREE.SphereGeometry(radius, 16, 16);
+                    material = new THREE.MeshStandardMaterial({ color: 0xcc2222 });
+                }
+                else if (n.includes('FLANGE') || n.includes('GASKET')) {
+                    // Flanges: flat cylinder (disc)
+                    const maxDim = Math.max(w, h, d);
+                    const minDim = Math.min(w, h, d);
+                    geometry = new THREE.CylinderGeometry(maxDim/2, maxDim/2, minDim, 16);
+                    material = new THREE.MeshStandardMaterial({ color: 0x888888 });
+                }
+                else if (n.includes('PIPE') || n.includes('BRANCH') || n.includes('TUBE')) {
+                    // Pipes
+                    const maxDim = Math.max(w, h, d);
+                    const radius = Math.min(w, h, d) / 2 || 0.1;
+                    geometry = new THREE.CylinderGeometry(radius, radius, maxDim, 16);
+                    material = new THREE.MeshStandardMaterial({ color: 0x3d74c5 });
+                }
+                else if (n.includes('SUPPORT') || n.includes('SUBEQUIPMENT')) {
+                    // Supports/Structures
+                    geometry = new THREE.BoxGeometry(w, h, d);
+                    material = new THREE.MeshStandardMaterial({ color: 0x999922 });
+                }
+                else if (n.includes('BOX') || n.includes('STRU') || n.includes('FRMW') || n.includes('SCTN')) {
+                    geometry = new THREE.BoxGeometry(w, h, d);
+                    material = new THREE.MeshStandardMaterial({ color: 0x555555 });
+                }
+                else {
+                    // Default fallback
+                    geometry = new THREE.BoxGeometry(w, h, d);
+                }
             }
+
+            const mesh = new THREE.Mesh(geometry, material);
+
+            // Position at center of bbox
+            mesh.position.set(
+                minX + width / 2,
+                minY + height / 2,
+                minZ + depth / 2
+            );
+
+            // If it's a cylinder, we need to orient it along the longest axis of the bbox
+            // BoxGeometry is already axis-aligned and fits perfectly.
+            // For CylinderGeometry, default is along Y-axis.
+            if (geometry.type === 'CylinderGeometry') {
+                if (w > h && w > d) {
+                    mesh.rotation.z = Math.PI / 2; // Align to X
+                } else if (d > h && d > w) {
+                    mesh.rotation.x = Math.PI / 2; // Align to Z
+                }
+                // If h is longest, leave as is (aligned to Y)
+            }
+
+            mesh.userData = { name: currentPath };
+            mesh.name = currentPath;
+            mesh.uuid = THREE.MathUtils.generateUUID();
+
+            group.add(mesh);
+            nodeRecord.renderObjectIds.push(mesh.name);
         }
 
         nodes.push(nodeRecord);
