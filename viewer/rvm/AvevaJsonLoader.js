@@ -63,38 +63,46 @@ export class AvevaJsonLoader {
         const group = new THREE.Group();
         group.name = currentPath;
 
-        // If it has a bbox, we draw a placeholder box for it (usually the leaf elements represent geometry)
+        // If it has a bbox, we draw a placeholder box for it
         if (element.bbox && Array.isArray(element.bbox) && element.bbox.length === 6) {
-            // Check if this is a leaf node or if we just want to draw all bboxes
-            // To prevent massive overlap, we'll draw bboxes only for nodes that have no children
-            // OR if it's explicitly a geometry node. Let's draw for nodes without children that have bboxes.
-            if (!element.children || element.children.length === 0) {
-                const [minX, minY, minZ, maxX, maxY, maxZ] = element.bbox;
+            // Draw bboxes for all nodes that have them.
+            // But we scale down non-leaf nodes or make them wireframes so they don't occlude leaves?
+            // Actually, in many of these exports, the parent nodes have bounding boxes that encompass all children.
+            // If we draw solid boxes for parents, we hide the children.
+            // Let's draw solid boxes for leaves, and wireframe boxes for parents!
+            const [minX, minY, minZ, maxX, maxY, maxZ] = element.bbox;
 
-                const width = Math.abs(maxX - minX);
-                const height = Math.abs(maxY - minY);
-                const depth = Math.abs(maxZ - minZ);
+            const width = Math.abs(maxX - minX);
+            const height = Math.abs(maxY - minY);
+            const depth = Math.abs(maxZ - minZ);
 
-                // Only create if it has some volume
-                if (width > 0 && height > 0 && depth > 0) {
-                    const geometry = new THREE.BoxGeometry(width, height, depth);
-                    const material = getMaterial(element.material || 1);
-                    const mesh = new THREE.Mesh(geometry, material);
+            // Only create if it has some volume (or a tiny minimum volume to ensure it renders)
+            const w = Math.max(width, 0.01);
+            const h = Math.max(height, 0.01);
+            const d = Math.max(depth, 0.01);
 
-                    // Position at center of bbox
-                    mesh.position.set(
-                        minX + width / 2,
-                        minY + height / 2,
-                        minZ + depth / 2
-                    );
+            const isLeaf = !element.children || element.children.length === 0;
 
-                    mesh.userData = { name: currentPath };
-                    mesh.name = currentPath;
-                    mesh.uuid = THREE.MathUtils.generateUUID();
+            // For Aveva dumps, components like PIPEs have bboxes, and their children (BRANCHes) have bboxes, and their children (ELBOWs, FLANGEs) have bboxes.
+            // Typically, we only want the leaf components. Let's just render the leaf components as solid.
+            if (isLeaf) {
+                const geometry = new THREE.BoxGeometry(w, h, d);
+                const material = getMaterial(element.material || 1);
+                const mesh = new THREE.Mesh(geometry, material);
 
-                    group.add(mesh);
-                    nodeRecord.renderObjectIds.push(mesh.name);
-                }
+                // Position at center of bbox
+                mesh.position.set(
+                    minX + width / 2,
+                    minY + height / 2,
+                    minZ + depth / 2
+                );
+
+                mesh.userData = { name: currentPath };
+                mesh.name = currentPath;
+                mesh.uuid = THREE.MathUtils.generateUUID();
+
+                group.add(mesh);
+                nodeRecord.renderObjectIds.push(mesh.name);
             }
         }
 
