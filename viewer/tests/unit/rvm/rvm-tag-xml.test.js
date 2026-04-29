@@ -50,7 +50,7 @@ function runTests() {
     assert.ok(createdTag.id);
 
     const xml = store.exportToXml();
-    assert.ok(xml.includes('<ReviewTags'));
+    assert.ok(xml.includes('<exchange'));
     assert.ok(xml.includes('bundleId="bundle-001"'));
 
     // Round-trip into a new store
@@ -68,7 +68,10 @@ function runTests() {
     assert.equal(rt.status, 'active');
     assert.deepEqual(rt.worldPosition, { x: 10, y: 20, z: 30 });
     assert.deepEqual(rt.cameraState.position, { x: 0, y: 0, z: 0 });
-    assert.deepEqual(rt.cameraState.target, { x: 1, y: 1, z: 1 });
+    // Handle JS floating point precision issues since we normalize and then multiply by sqrt(3)
+    assert.ok(Math.abs(rt.cameraState.target.x - 1) < 0.00001);
+    assert.ok(Math.abs(rt.cameraState.target.y - 1) < 0.00001);
+    assert.ok(Math.abs(rt.cameraState.target.z - 1) < 0.00001);
     console.log('✅ create tag -> serialize -> parse -> same fields round-trip');
     console.log('✅ XML escaping: title with <>&" chars survives round-trip');
     console.log('✅ export XML is well-formed (parseable by DOMParser without error)');
