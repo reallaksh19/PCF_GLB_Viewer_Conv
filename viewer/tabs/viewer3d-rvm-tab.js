@@ -8,7 +8,7 @@ import { RvmSearchIndex } from '../rvm/RvmSearchIndex.js';
 import { parseRmssAttributes } from '../converters/rmss-attribute-parser.js';
 import { downloadText } from '../pcfx/Pcfx_FileIO.js';
 
-let _viewer.treeModel = null; _viewer = null;
+let _viewer = null;
 let _shortcutHandler = null;
 let _resizeObserver = null;
 let _capabilitiesListenerOff = null;
@@ -499,6 +499,15 @@ export function renderViewer3DRvm(container) {
 }
 
 
+
+function escapeHtml(unsafe) {
+    return (unsafe || '').replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+}
+
 function _renderTagList(container, filter = 'all') {
     const listEl = container.querySelector('#rvm-tag-list');
     if (!listEl || !_viewer || !_viewer.tagStore) return;
@@ -515,9 +524,9 @@ function _renderTagList(container, filter = 'all') {
         else if (sev === 'medium') color = '#aa8822';
         else if (sev === 'low') color = '#22aa55';
 
-        return `<div class="rvm-tag-item" data-id="${t.id}" style="padding:8px;border-left:4px solid ${color};margin-bottom:4px;background:#2a2a2a;cursor:pointer;">
-            <div style="font-weight:bold;margin-bottom:4px;">${t.text || t.id}</div>
-            <div style="font-size:10px;color:#888;">Severity: ${sev.toUpperCase()}</div>
+        return `<div class="rvm-tag-item" data-id="${escapeHtml(t.id)}" style="padding:8px;border-left:4px solid ${color};margin-bottom:4px;background:#2a2a2a;cursor:pointer;">
+            <div style="font-weight:bold;margin-bottom:4px;">${escapeHtml(t.text || t.id)}</div>
+            <div style="font-size:10px;color:#888;">Severity: ${escapeHtml(sev.toUpperCase())}</div>
         </div>`;
     }).join('');
 
@@ -530,6 +539,7 @@ function _renderTagList(container, filter = 'all') {
         });
     });
 }
+
 
 function _bindTags(container) {
   const filterSelect = container.querySelector('#rvm-tag-severity-filter');
