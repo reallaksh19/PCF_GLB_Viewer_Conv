@@ -110,12 +110,45 @@ function parseRmssAttributes(content) {
 
   // Filter out branches that have no relevant children
   return Array.from(branchMap.values()).filter(b => b.children.length > 0).map(branch => {
-      // Improve Topology: Sort components within a branch by coordinates sequence if possible
-      if (branch.children.length > 0) {
-          // Calculate distance from branch start (head) if branch head is known, else just use a simple heuristic
-          // For now, sorting logic can be based on distance from the first component's APOS, or just left in original order.
-          // RMSS dumps usually have them in sequence, so we can keep original order but ensure they have sequence IDs.
+      // Topology Builder: Connect fittings based on fitting's start/end vectors to build pipes.
+      // Remove any previously parsed TUBI/PIPE elements since they are unreliable.
+      let fittings = branch.children.filter(c => c.type !== 'TUBI' && c.type !== 'PIPE');
+
+      // Connect adjacent fittings with a generated PIPE if their distance is significant
+      const newChildren = [];
+      for (let i = 0; i < fittings.length; i++) {
+          newChildren.push(fittings[i]);
+
+          if (i < fittings.length - 1) {
+              const currentFitting = fittings[i];
+              const nextFitting = fittings[i+1];
+
+              if (currentFitting.attributes && currentFitting.attributes.LPOS &&
+                  nextFitting.attributes && nextFitting.attributes.APOS) {
+
+                  const p1 = currentFitting.attributes.LPOS;
+                  const p2 = nextFitting.attributes.APOS;
+
+                  const dx = p2.x - p1.x;
+                  const dy = p2.y - p1.y;
+                  const dz = p2.z - p1.z;
+
+                  // If distance > 1mm, assume there is a pipe between them
+                  const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                  if (dist > 1) {
+                      newChildren.push({
+                          name: `${branch.name}-GEN-PIPE-${i}`,
+                          type: 'PIPE',
+                          attributes: {
+                              APOS: p1,
+                              LPOS: p2
+                          }
+                      });
+                  }
+              }
+          }
       }
+      branch.children = newChildren;
       return branch;
   });
 }

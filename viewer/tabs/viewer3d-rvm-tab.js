@@ -162,6 +162,20 @@ function _bindBundleLoader(container) {
 
 // ── Search handler ──────────────────────────────────────────────────────────
 
+
+function _bindAttrSearch(container) {
+  const input = container.querySelector('#rvm-attr-search');
+  if (!input) return;
+  input.addEventListener('input', () => {
+    const term = input.value.toLowerCase();
+    const rows = container.querySelectorAll('.rvm-attr-row');
+    rows.forEach(row => {
+      const text = row.textContent.toLowerCase();
+      row.style.display = text.includes(term) ? '' : 'none';
+    });
+  });
+}
+
 function _bindSearch(container) {
   const input = container.querySelector('#rvm-search-input');
   if (!input) return;
@@ -222,6 +236,10 @@ function _buildHTML(caps) {
           ${icon}<span>${ACTION_LABELS[id] || id}</span>
         </button>
       `).join('')}
+      <div style="border-left:1px solid #444;margin:0 5px;height:24px;"></div>
+      <button class="rvm-tool-btn" data-action="TAKE_SNAPSHOT" title="Take View Snapshot">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><span>Snapshot</span>
+      </button>
     </div>
     <div class="rvm-ribbon-section rvm-ribbon-search">
       <input type="search" id="rvm-search-input" placeholder="Search objects…" autocomplete="off">
@@ -240,8 +258,18 @@ function _buildHTML(caps) {
     </div>
     <div class="geo-right-panel rvm-right-panel">
       <div class="rvm-panel-header">Attributes</div>
+      <input type="text" id="rvm-attr-search" placeholder="Filter attributes..." style="width: 100%; box-sizing: border-box; padding: 4px; background: #222; color: #fff; border: 1px solid #444;">
       <div id="rvm-attributes-content" class="rvm-attributes-panel"></div>
       <div class="rvm-panel-header">Review Tags</div>
+      <div style="display:flex;gap:5px;padding:5px;background:#1a1a1a;">
+        <select id="rvm-tag-severity-filter" style="flex:1;background:#333;color:#fff;border:1px solid #555;">
+          <option value="all">All Tags</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+          <option value="info">Info</option>
+        </select>
+      </div>
       <div style="display:flex;gap:5px;padding:5px;">
         <label class="rvm-btn" style="flex:1;text-align:center;cursor:pointer;" title="Import Tags from XML">
           Import
@@ -284,6 +312,18 @@ function _bindToolbarActions(container) {
       case 'SECTION_BOX': _viewer?.setSectionMode?.('BOX'); break;
       case 'SECTION_PLANE_UP': _viewer?.setSectionMode?.('PLANE_UP'); break;
       case 'SECTION_DISABLE': _viewer?.disableSection?.(); break;
+      case 'TAKE_SNAPSHOT': {
+        if (_viewer && _viewer.renderer) {
+            _viewer.renderer.render(_viewer.scene, _viewer.camera);
+            const dataURL = _viewer.renderer.domElement.toDataURL('image/png');
+            const a = document.createElement('a');
+            a.href = dataURL;
+            a.download = `rvm_snapshot_${Date.now()}.png`;
+            a.click();
+            notify({ type: 'success', message: 'Snapshot downloaded successfully' });
+        }
+        break;
+      }
     }
   });
 }
@@ -315,6 +355,9 @@ function _bindTabListener() {
         if (container) {
             const exportBtn = container.querySelector('#rvm-export-tags-btn');
             if (exportBtn) exportBtn.disabled = false;
+
+            // Initial render of tags if any were loaded with bundle
+            _renderTagList(container);
         }
     }
   };
@@ -339,6 +382,7 @@ export function renderViewer3DRvm(container) {
 
   _renderCapabilityBanner(container, caps);
   _bindBundleLoader(container);
+  _bindAttrSearch(container);
   _bindSearch(container);
   _bindToolbarActions(container);
   _bindResize(container);
@@ -415,7 +459,57 @@ export function renderViewer3DRvm(container) {
   return _disposeRvmViewer;
 }
 
+
+function _renderTagList(container, filter = 'all') {
+    const listEl = container.querySelector('#rvm-tag-list');
+    if (!listEl || !_viewer || !_viewer.tagStore) return;
+
+    let tags = _viewer.tagStore.getAllTags();
+    if (filter !== 'all') {
+        tags = tags.filter(t => (t.severity || 'info').toLowerCase() === filter);
+    }
+
+    listEl.innerHTML = tags.map(t => {
+        let color = '#3d74c5';
+        const sev = (t.severity || 'info').toLowerCase();
+        if (sev === 'high') color = '#cc2222';
+        else if (sev === 'medium') color = '#aa8822';
+        else if (sev === 'low') color = '#22aa55';
+
+        return `<div class="rvm-tag-item" data-id="${t.id}" style="padding:8px;border-left:4px solid ${color};margin-bottom:4px;background:#2a2a2a;cursor:pointer;">
+            <div style="font-weight:bold;margin-bottom:4px;">${t.text || t.id}</div>
+            <div style="font-size:10px;color:#888;">Severity: ${sev.toUpperCase()}</div>
+        </div>`;
+    }).join('');
+
+    // Add click listeners to jump to tag
+    const items = listEl.querySelectorAll('.rvm-tag-item');
+    items.forEach(item => {
+        item.addEventListener('click', () => {
+            const id = item.dataset.id;
+            _viewer.jumpToTag(id);
+        });
+    });
+}
+
 function _bindTags(container) {
+  const filterSelect = container.querySelector('#rvm-tag-severity-filter');
+  if (filterSelect) {
+      filterSelect.addEventListener('change', (e) => {
+          _renderTagList(container, e.target.value);
+      });
+  }
+
+  // Hook into RuntimeEvents to auto-refresh the tag list
+  on(RuntimeEvents.RVM_TAG_CREATED, () => {
+      const filter = filterSelect ? filterSelect.value : 'all';
+      _renderTagList(container, filter);
+  });
+  on(RuntimeEvents.RVM_TAG_DELETED, () => {
+      const filter = filterSelect ? filterSelect.value : 'all';
+      _renderTagList(container, filter);
+  });
+
   const exportBtn = container.querySelector('#rvm-export-tags-btn');
   const importInput = container.querySelector('#rvm-import-tags-input');
 

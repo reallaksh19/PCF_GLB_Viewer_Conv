@@ -40,6 +40,76 @@ export class RvmViewer3D {
         this.mouse = new THREE.Vector2();
         this._onCanvasClick = this._onCanvasClick.bind(this);
         this.container.addEventListener('click', this._onCanvasClick);
+        this._onDoubleClickLocal = (event) => {
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        const mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        this.raycaster.setFromCamera({ x: mouseX, y: mouseY }, this.camera);
+        const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+        const validIntersects = intersects.filter(i => i.object.type === 'Mesh');
+
+        if (validIntersects.length > 0) {
+            const object = validIntersects[0].object;
+            const box = new THREE.Box3().setFromObject(object);
+
+            // Apply slight padding
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            box.expandByScalar(maxDim * 0.5);
+
+            if (this._fitBox) {
+                this._fitBox(box);
+            }
+        }
+    };
+        this.container.addEventListener('dblclick', this._onDoubleClickLocal);
+
+        // Hover Highlight
+        this.hoveredObject = null;
+        this.hoverOriginalColor = null;
+        this.hoverMoveHandler = (event) => {
+        if (this.measureModeEnabled || this.marqueeModeEnabled) {
+            // Don't highlight when using tools
+            if (this._clearHover) this._clearHover();
+            return;
+        }
+
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        const mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        this.raycaster.setFromCamera({ x: mouseX, y: mouseY }, this.camera);
+        const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+        const validIntersects = intersects.filter(i => i.object.type === 'Mesh');
+
+        if (validIntersects.length > 0) {
+            const object = validIntersects[0].object;
+            if (this.hoveredObject !== object) {
+                if (this._clearHover) this._clearHover();
+                this.hoveredObject = object;
+                if (object.material && object.material.color) {
+                    this.hoverOriginalColor = object.material.color.getHex();
+                    // Lighten the color
+                    object.material.color.setHex(0xffffff);
+                }
+            }
+        } else {
+            if (this._clearHover) this._clearHover();
+        }
+    };
+
+    this._clearHover = () => {
+        if (this.hoveredObject && this.hoverOriginalColor !== null) {
+            if (this.hoveredObject.material && this.hoveredObject.material.color) {
+                this.hoveredObject.material.color.setHex(this.hoverOriginalColor);
+            }
+        }
+        this.hoveredObject = null;
+        this.hoverOriginalColor = null;
+    };
+        this.container.addEventListener('pointermove', this.hoverMoveHandler);
 
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0xf0f0f0);
@@ -69,7 +139,7 @@ export class RvmViewer3D {
         this._isOrthographic = false;
 
         // WebGL Renderer
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", preserveDrawingBuffer: true });
         this.renderer.setSize(width, height);
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.localClippingEnabled = true; // Critical for section planes
@@ -687,13 +757,16 @@ getNavMode() {
     dispose() {
         this._disposed = true;
         this.container.removeEventListener('click', this._onCanvasClick);
+        if (this._onDoubleClickLocal) { this.container.removeEventListener('dblclick', this._onDoubleClickLocal); }
         this.container.removeEventListener('pointerdown', this._onPointerDown);
         this.container.removeEventListener('pointermove', this._onPointerMove);
+        if (this.hoverMoveHandler) { this.container.removeEventListener('pointermove', this.hoverMoveHandler); }
         window.removeEventListener('pointerup', this._onPointerUp);
         if (this.marqueeElement && this.marqueeElement.parentNode) {
             this.marqueeElement.parentNode.removeChild(this.marqueeElement);
         }
         this.clearMeasurement();
+        if (this._clearHover) { this._clearHover(); }
         cancelAnimationFrame(this._animationFrameId);
 
 
