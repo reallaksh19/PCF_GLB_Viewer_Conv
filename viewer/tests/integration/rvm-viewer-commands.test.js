@@ -79,7 +79,11 @@ function runTests() {
     // To mock requestAnimationFrame and document for headless environment
     global.requestAnimationFrame = () => 1;
     global.cancelAnimationFrame = () => {};
-    global.window = { devicePixelRatio: 1 };
+    global.window = {
+        devicePixelRatio: 1,
+        addEventListener: () => {},
+        removeEventListener: () => {}
+    };
     global.document = {
         createElementNS: () => ({ style: {}, getContext: () => ({}) })
     };

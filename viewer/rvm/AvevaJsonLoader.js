@@ -102,6 +102,9 @@ export class AvevaJsonLoader {
             } else if (element.type === 'TEE' || element.type === 'OLET') {
                 geometry = new THREE.CylinderGeometry(radius, radius, length, 16);
                 material = new THREE.MeshStandardMaterial({ color: 0x55aa55 });
+            } else if (element.type === 'TUBI' || element.type === 'PIPE') {
+                geometry = new THREE.CylinderGeometry(radius, radius, length, 16);
+                material = new THREE.MeshStandardMaterial({ color: 0x3d74c5 });
             } else {
                 geometry = new THREE.CylinderGeometry(radius, radius, length, 16);
                 material = new THREE.MeshStandardMaterial({ color: 0x3d74c5 });
@@ -200,8 +203,30 @@ export class AvevaJsonLoader {
         parentGroup.add(group);
 
         if (element.children && Array.isArray(element.children)) {
+            // Draw topological connecting lines between children if they have APOS/LPOS
+            let prevPoint = null;
             for (const child of element.children) {
                 traverse(child, group, currentPath);
+
+                if (child.attributes && child.attributes.APOS) {
+                    const currentPoint = new THREE.Vector3(child.attributes.APOS.x, child.attributes.APOS.y, child.attributes.APOS.z);
+                    if (prevPoint) {
+                        const dist = prevPoint.distanceTo(currentPoint);
+                        if (dist > 0.001) {
+                            // Draw a thin connecting line to represent the topology between components
+                            const lineMat = new THREE.LineBasicMaterial({ color: 0x3d74c5, linewidth: 2 });
+                            const points = [prevPoint, currentPoint];
+                            const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+                            const lineMesh = new THREE.Line(lineGeo, lineMat);
+                            group.add(lineMesh);
+                        }
+                    }
+                    if (child.attributes.LPOS) {
+                        prevPoint = new THREE.Vector3(child.attributes.LPOS.x, child.attributes.LPOS.y, child.attributes.LPOS.z);
+                    } else {
+                        prevPoint = currentPoint;
+                    }
+                }
             }
         }
     }

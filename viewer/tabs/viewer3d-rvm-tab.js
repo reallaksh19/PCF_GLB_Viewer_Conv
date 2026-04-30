@@ -5,6 +5,7 @@ import { detectRvmCapabilities } from '../rvm/RvmCapabilities.js';
 import { notify } from '../diagnostics/notification-center.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js';
 import { parseRmssAttributes } from '../converters/rmss-attribute-parser.js';
+import { downloadText } from '../pcfx/Pcfx_FileIO.js';
 
 let _viewer = null;
 let _shortcutHandler = null;
@@ -110,6 +111,8 @@ function _bindBundleLoader(container) {
       try {
           const text = await file.text();
           const hierarchyJson = parseRmssAttributes(text);
+
+          downloadText(JSON.stringify(hierarchyJson, null, 2), file.name + '.json', 'application/json');
 
           emit(RuntimeEvents.FILE_LOADED, {
               name: file.name + '.json',
@@ -239,6 +242,13 @@ function _buildHTML(caps) {
       <div class="rvm-panel-header">Attributes</div>
       <div id="rvm-attributes-content" class="rvm-attributes-panel"></div>
       <div class="rvm-panel-header">Review Tags</div>
+      <div style="display:flex;gap:5px;padding:5px;">
+        <label class="rvm-btn" style="flex:1;text-align:center;cursor:pointer;" title="Import Tags from XML">
+          Import
+          <input type="file" id="rvm-import-tags-input" accept=".xml" style="display:none">
+        </label>
+        <button class="rvm-btn" id="rvm-export-tags-btn" style="flex:1;" disabled title="Export Tags to XML">Export</button>
+      </div>
       <div id="rvm-tag-list" class="rvm-tag-list"></div>
       <button class="rvm-btn" id="rvm-add-tag-btn" disabled>+ Add Tag</button>
     </div>
@@ -259,6 +269,8 @@ function _bindToolbarActions(container) {
       case 'NAV_ORBIT':   _viewer?.setNavMode?.('orbit'); break;
       case 'NAV_PAN':     _viewer?.setNavMode?.('pan'); break;
       case 'NAV_SELECT':  _viewer?.setNavMode?.('select'); break;
+      case 'MEASURE_TOOL': _viewer?.setNavMode?.('Measure'); break;
+      case 'VIEW_MARQUEE_ZOOM': _viewer?.setNavMode?.('Zoom'); break;
       case 'NAV_PLAN_X':  _viewer?.snapToPreset?.('TOP'); break;
       case 'NAV_ROTATE_Y': _viewer?.snapToPreset?.('FRONT'); break;
       case 'NAV_ROTATE_Z': _viewer?.snapToPreset?.('RIGHT'); break;
@@ -298,6 +310,12 @@ function _bindTabListener() {
     if (_viewer && payload && payload.gltf && payload.gltf.scene) {
         _viewer.setModel(payload.gltf.scene, payload.manifest?.runtime?.upAxis);
         _viewer.fitAll();
+
+        const container = document.querySelector('.rvm-tab-root');
+        if (container) {
+            const exportBtn = container.querySelector('#rvm-export-tags-btn');
+            if (exportBtn) exportBtn.disabled = false;
+        }
     }
   };
 
@@ -326,6 +344,7 @@ export function renderViewer3DRvm(container) {
   _bindResize(container);
   _bindShortcuts(container);
   _bindTabListener();
+  _bindTags(container);
 
   // Initialize the actual RvmViewer3D instance inside the viewport container
   const viewport = container.querySelector('.rvm-viewport');
@@ -394,4 +413,36 @@ export function renderViewer3DRvm(container) {
   });
 
   return _disposeRvmViewer;
+}
+
+function _bindTags(container) {
+  const exportBtn = container.querySelector('#rvm-export-tags-btn');
+  const importInput = container.querySelector('#rvm-import-tags-input');
+
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      if (!_viewer || !_viewer.tagStore) return;
+      const xmlString = _viewer.tagStore.exportToXml();
+      downloadText(xmlString, 'tags.xml', 'application/xml');
+    });
+  }
+
+  if (importInput) {
+    importInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const xmlText = await file.text();
+        if (_viewer && _viewer.tagStore) {
+            _viewer.tagStore.importFromXml(xmlText);
+            notify({ type: 'success', message: 'Tags imported successfully' });
+        } else {
+            notify({ type: 'warning', message: 'No model loaded to import tags into' });
+        }
+      } catch (err) {
+        notify({ type: 'error', message: `Failed to import tags: ${err.message}` });
+      }
+      importInput.value = ''; // reset
+    });
+  }
 }

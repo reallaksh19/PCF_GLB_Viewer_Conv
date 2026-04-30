@@ -48,7 +48,7 @@ function parseRmssAttributes(content) {
 
   const branches = allObjects.filter(o => o.attributes.TYPE === 'BRAN');
   const relevantComponents = allObjects.filter(o =>
-    ['VALV', 'FLAN', 'ELBO', 'TEE', 'OLET', 'GASK', 'ATTA'].includes(o.attributes.TYPE)
+    ['VALV', 'FLAN', 'ELBO', 'TEE', 'OLET', 'GASK', 'ATTA', 'TUBI', 'PIPE', 'BEND'].includes(o.attributes.TYPE)
   );
 
   const branchMap = new Map();
@@ -78,14 +78,15 @@ function parseRmssAttributes(content) {
       const apos = parseCoord(comp.attributes.APOS);
       const lpos = parseCoord(comp.attributes.LPOS);
 
-      if (t === 'VALV') {
-        node.attributes = { APOS: apos, LPOS: lpos };
-      } else if (t === 'FLAN') {
-        node.attributes = { DTXR: comp.attributes.DTXR, APOS: apos, LPOS: lpos };
-      } else if (t === 'ELBO' || t === 'TEE' || t === 'OLET') {
-        node.attributes = { ANGL: comp.attributes.ANGL, DTXR: comp.attributes.DTXR, APOS: apos, LPOS: lpos };
+      node.attributes = { APOS: apos, LPOS: lpos };
+
+      if (t === 'FLAN') {
+        node.attributes.DTXR = comp.attributes.DTXR;
+      } else if (t === 'ELBO' || t === 'TEE' || t === 'OLET' || t === 'BEND') {
+        node.attributes.ANGL = comp.attributes.ANGL;
+        node.attributes.DTXR = comp.attributes.DTXR;
       } else if (t === 'GASK') {
-        node.attributes = { DTXR: comp.attributes.DTXR, APOS: apos, LPOS: lpos };
+        node.attributes.DTXR = comp.attributes.DTXR;
       } else if (t === 'ATTA') {
         if (comp.attributes.CMPSUPTYPE) {
           node.type = 'SUPPORT';
@@ -99,6 +100,8 @@ function parseRmssAttributes(content) {
         } else {
           continue; // Skip non-support ATTAs
         }
+      } else if (t === 'TUBI' || t === 'PIPE') {
+         // tubi/pipe uses apos/lpos as well
       }
 
       branchMap.get(owner).children.push(node);
@@ -106,7 +109,15 @@ function parseRmssAttributes(content) {
   }
 
   // Filter out branches that have no relevant children
-  return Array.from(branchMap.values()).filter(b => b.children.length > 0);
+  return Array.from(branchMap.values()).filter(b => b.children.length > 0).map(branch => {
+      // Improve Topology: Sort components within a branch by coordinates sequence if possible
+      if (branch.children.length > 0) {
+          // Calculate distance from branch start (head) if branch head is known, else just use a simple heuristic
+          // For now, sorting logic can be based on distance from the first component's APOS, or just left in original order.
+          // RMSS dumps usually have them in sequence, so we can keep original order but ensure they have sequence IDs.
+      }
+      return branch;
+  });
 }
 
 // Ensure we export it properly for both ES modules and CommonJS
