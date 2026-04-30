@@ -278,15 +278,33 @@ function _buildHTML(caps) {
       <canvas class="rvm-canvas" id="rvm-canvas"></canvas>
     </div>
 
+
     <div class="geo-right-panel rvm-right-panel">
       <div class="rvm-panel-header">Attributes</div>
       <input type="text" id="rvm-attr-search" placeholder="Filter attributes..." style="width: 100%; box-sizing: border-box; padding: 4px; background: #222; color: #fff; border: 1px solid #444;">
       <div id="rvm-attributes-content" class="rvm-attributes-panel"></div>
 
       <div class="rvm-panel-header">Review Tags</div>
+      <div style="display:flex;gap:5px;padding:5px;background:#1a1a1a;">
+        <select id="rvm-tag-severity-filter" style="flex:1;background:#333;color:#fff;border:1px solid #555;">
+          <option value="all">All Tags</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+          <option value="info">Info</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:5px;padding:5px;">
+        <label class="rvm-btn" style="flex:1;text-align:center;cursor:pointer;" title="Import Tags from XML">
+          Import
+          <input type="file" id="rvm-import-tags-input" accept=".xml" style="display:none">
+        </label>
+        <button class="rvm-btn" id="rvm-export-tags-btn" style="flex:1;" disabled title="Export Tags to XML">Export</button>
+      </div>
       <div id="rvm-tag-list" class="rvm-tag-list"></div>
       <button class="rvm-btn" id="rvm-add-tag-btn" disabled>+ Add Tag</button>
     </div>
+
   </div>
 </div>`.trim();
 }
@@ -335,16 +353,55 @@ function _bindResize(container) {
 
 // ── Tab event listener (TAB_CHANGED) ───────────────────────────────────────
 
+
 function _bindTabListener() {
   const tabChangedCallback = ({ tabId }) => {
-    if (tabId !== 'viewer3d-rvm') _disposeRvmViewer();
+    if (tabId !== 'viewer3d-rvm') {
+       const root = document.querySelector('.rvm-tab-root');
+       if (root) root.style.display = 'none';
+    } else {
+       const root = document.querySelector('.rvm-tab-root');
+       if (root) root.style.display = '';
+    }
   };
   const modelLoadedCallback = (payload) => {
     if (_viewer && payload && payload.gltf && payload.gltf.scene) {
         _viewer.setModel(payload.gltf.scene, payload.manifest?.runtime?.upAxis);
         _viewer.fitAll();
+
+        if (payload.indexJson && payload.identityMap) {
+            _viewer.searchIndex = new RvmSearchIndex(payload.indexJson, payload.identityMap);
+            _viewer.searchIndex.build();
+        }
+
+        const container = document.querySelector('.rvm-tab-root');
+        if (container && payload.indexJson && payload.indexJson.nodes) {
+            const tree = container.querySelector('#rvm-hierarchy-tree');
+            if (tree) {
+                if (!_viewer.treeModel) {
+                    import('../rvm/RvmTreeModel.js').then(module => {
+                        _viewer.treeModel = new module.RvmTreeModel(payload.indexJson, { viewer: _viewer });
+                        _viewer.treeModel.build();
+                        _viewer.treeModel.renderTree(tree);
+                    });
+                } else {
+                    _viewer.treeModel.renderTree(tree);
+                }
+            }
+        }
+
+        if (container) {
+            const exportBtn = container.querySelector('#rvm-export-tags-btn');
+            if (exportBtn) exportBtn.disabled = false;
+            const addBtn = container.querySelector('#rvm-add-tag-btn');
+            if (addBtn) addBtn.disabled = false;
+
+            // Initial render of tags if any were loaded with bundle
+            _renderTagList(container);
+        }
     }
   };
+
 
   on(RuntimeEvents.TAB_CHANGED, tabChangedCallback);
   on(RuntimeEvents.RVM_MODEL_LOADED, modelLoadedCallback);
@@ -372,6 +429,7 @@ export function renderViewer3DRvm(container) {
   _bindResize(container);
   _bindShortcuts(container);
   _bindTabListener();
+  _bindTags(container);
 
   // Initialize the actual RvmViewer3D instance inside the viewport container
   const viewport = container.querySelector('.rvm-viewport');
@@ -440,4 +498,124 @@ export function renderViewer3DRvm(container) {
   });
 
   return _disposeRvmViewer;
+}
+
+
+
+function escapeHtml(unsafe) {
+    return (unsafe || '').replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+}
+
+function _renderTagList(container, filter = 'all') {
+    const listEl = container.querySelector('#rvm-tag-list');
+    if (!listEl || !_viewer || !_viewer.tagStore) return;
+
+    let tags = _viewer.tagStore.getAllTags();
+    if (filter !== 'all') {
+        tags = tags.filter(t => (t.severity || 'info').toLowerCase() === filter);
+    }
+
+    listEl.innerHTML = tags.map(t => {
+        let color = '#3d74c5';
+        const sev = (t.severity || 'info').toLowerCase();
+        if (sev === 'high') color = '#cc2222';
+        else if (sev === 'medium') color = '#aa8822';
+        else if (sev === 'low') color = '#22aa55';
+
+        return `<div class="rvm-tag-item" data-id="${escapeHtml(t.id)}" style="padding:8px;border-left:4px solid ${color};margin-bottom:4px;background:#2a2a2a;cursor:pointer;">
+            <div style="font-weight:bold;margin-bottom:4px;">${escapeHtml(t.text || t.id)}</div>
+            <div style="font-size:10px;color:#888;">Severity: ${escapeHtml(sev.toUpperCase())}</div>
+        </div>`;
+    }).join('');
+
+    // Add click listeners to jump to tag
+    const items = listEl.querySelectorAll('.rvm-tag-item');
+    items.forEach(item => {
+        item.addEventListener('click', () => {
+            const id = item.dataset.id;
+            _viewer.jumpToTag(id);
+        });
+    });
+}
+
+function _bindTags(container) {
+  const filterSelect = container.querySelector('#rvm-tag-severity-filter');
+  if (filterSelect) {
+      filterSelect.addEventListener('change', (e) => {
+          _renderTagList(container, e.target.value);
+      });
+  }
+
+  // Hook into RuntimeEvents to auto-refresh the tag list
+  on(RuntimeEvents.RVM_TAG_CREATED, () => {
+      const filter = filterSelect ? filterSelect.value : 'all';
+      _renderTagList(container, filter);
+  });
+  on(RuntimeEvents.RVM_TAG_DELETED, () => {
+      const filter = filterSelect ? filterSelect.value : 'all';
+      _renderTagList(container, filter);
+  });
+
+  const exportBtn = container.querySelector('#rvm-export-tags-btn');
+  const importInput = container.querySelector('#rvm-import-tags-input');
+
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      if (!_viewer || !_viewer.tagStore) return;
+      const xmlString = _viewer.tagStore.exportToXml();
+      downloadText(xmlString, 'tags.xml', 'application/xml');
+    });
+  }
+
+  if (importInput) {
+    importInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const xmlText = await file.text();
+        if (_viewer && _viewer.tagStore) {
+            _viewer.tagStore.importFromXml(xmlText);
+            notify({ type: 'success', message: 'Tags imported successfully' });
+        } else {
+            notify({ type: 'warning', message: 'No model loaded to import tags into' });
+        }
+      } catch (err) {
+        notify({ type: 'error', message: `Failed to import tags: ${err.message}` });
+      }
+      importInput.value = ''; // reset
+    });
+  }
+
+  const addBtn = container.querySelector('#rvm-add-tag-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      if (!_viewer || !_viewer.tagStore) return;
+      const selection = _viewer.getSelection();
+      if (!selection.canonicalObjectId) {
+         notify({ type: 'warning', message: 'Select an object first to attach a tag.' });
+         return;
+      }
+
+      const text = prompt('Enter tag description:');
+      if (!text) return;
+
+      const sev = prompt('Enter severity (high, medium, low, info):', 'info');
+
+      // Create tag using current camera state and selection
+      const view = _viewer.getSavedView();
+      const tag = _viewer.tagStore.createTag(selection.canonicalObjectId, {
+         text: text,
+         severity: sev || 'info',
+         cameraState: view.camera,
+         worldPosition: view.camera.target
+      });
+
+      _viewer.addTag(tag);
+      notify({ type: 'success', message: 'Tag created successfully.' });
+    });
+  }
 }

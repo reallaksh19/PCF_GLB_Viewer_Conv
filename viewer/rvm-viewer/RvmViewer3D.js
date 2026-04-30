@@ -80,6 +80,16 @@ export class RvmViewer3D {
         this.visibility = new RvmVisibilityController(this.modelGroup, this.ctx?.identityMap);
         this.selection = new RvmSelectionAdapter(this.modelGroup, this.camera, this.renderer.domElement, this.ctx?.identityMap);
 
+        this._onPointerDown = this._onPointerDown.bind(this);
+        this._onPointerMove = this._onPointerMove.bind(this);
+        this._onPointerUp = this._onPointerUp.bind(this);
+        this.container.addEventListener('pointerdown', this._onPointerDown);
+        this.container.addEventListener('pointermove', this._onPointerMove);
+        if (typeof window !== 'undefined' && window.addEventListener) {
+            window.addEventListener('pointerup', this._onPointerUp);
+        }
+
+
         // Resize Observer
         this._resizeObserver = new ResizeObserver((entries) => {
             if (this._disposed) return;
