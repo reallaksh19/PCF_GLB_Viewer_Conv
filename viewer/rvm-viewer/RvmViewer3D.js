@@ -13,6 +13,112 @@ export class RvmViewer3D {
 
         this._disposed = false;
 
+        // Marquee Zoom
+        this.marqueeModeEnabled = false;
+        this.marqueeElement = document.createElement('div');
+        this.marqueeElement.style.position = 'absolute';
+        this.marqueeElement.style.border = '1px dashed #fff';
+        this.marqueeElement.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+        this.marqueeElement.style.pointerEvents = 'none';
+        this.marqueeElement.style.display = 'none';
+        this.container.appendChild(this.marqueeElement);
+        this.isMarqueeDragging = false;
+        this.marqueeStart = { x: 0, y: 0 };
+        this._onPointerDown = this._onPointerDown.bind(this);
+        this._onPointerMove = this._onPointerMove.bind(this);
+        this._onPointerUp = this._onPointerUp.bind(this);
+        this.container.addEventListener('pointerdown', this._onPointerDown);
+        this.container.addEventListener('pointermove', this._onPointerMove);
+        window.addEventListener('pointerup', this._onPointerUp);
+
+        // Measurement Tool
+        this.measureModeEnabled = false;
+        this.measurePoints = [];
+        this.measureLine = null;
+        this.measureLabels = [];
+        this.raycaster = new THREE.Raycaster();
+        this.mouse = new THREE.Vector2();
+        this._onCanvasClick = this._onCanvasClick.bind(this);
+        this.container.addEventListener('click', this._onCanvasClick);
+        this._onDoubleClickLocal = (event) => {
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        const mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        this.raycaster.setFromCamera({ x: mouseX, y: mouseY }, this.camera);
+        const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+        const validIntersects = intersects.filter(i => i.object.type === 'Mesh');
+
+        if (validIntersects.length > 0) {
+            const object = validIntersects[0].object;
+            const box = new THREE.Box3().setFromObject(object);
+
+            // Apply slight padding
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            box.expandByScalar(maxDim * 0.5);
+
+            if (this._fitBox) {
+                this._fitBox(box);
+            }
+        }
+    };
+        this.container.addEventListener('dblclick', this._onDoubleClickLocal);
+
+        // Hover Highlight
+        this.hoveredObject = null;
+        this.hoverOriginalColor = null;
+        this.hoverMoveHandler = (event) => {
+        if (this.measureModeEnabled || this.marqueeModeEnabled) {
+            // Don't highlight when using tools
+            if (this._clearHover) this._clearHover();
+            return;
+        }
+
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        const mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        this.raycaster.setFromCamera({ x: mouseX, y: mouseY }, this.camera);
+        const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+        const validIntersects = intersects.filter(i => i.object.type === 'Mesh');
+
+        if (validIntersects.length > 0) {
+            const object = validIntersects[0].object;
+            if (this.hoveredObject !== object) {
+                if (this._clearHover) this._clearHover();
+                this.hoveredObject = object;
+                if (object.material) {
+                    // Clone the material to avoid shared material issues
+                    this.hoverOriginalMaterial = object.material;
+                    object.material = object.material.clone();
+                    if (object.material.emissive) {
+                        object.material.emissive.setHex(0x333333);
+                    } else if (object.material.color) {
+                         // Lighten color slightly
+                         object.material.color.lerp(new THREE.Color(0xffffff), 0.3);
+                    }
+                }
+            }
+        } else {
+            if (this._clearHover) this._clearHover();
+        }
+    };
+
+    this._clearHover = () => {
+        if (this.hoveredObject && this.hoverOriginalMaterial) {
+            // Restore original material and dispose the cloned one
+            if (this.hoveredObject.material && this.hoveredObject.material !== this.hoverOriginalMaterial) {
+                 this.hoveredObject.material.dispose();
+            }
+            this.hoveredObject.material = this.hoverOriginalMaterial;
+        }
+        this.hoveredObject = null;
+        this.hoverOriginalMaterial = null;
+    };
+        this.container.addEventListener('pointermove', this.hoverMoveHandler);
+
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0xf0f0f0);
 
@@ -41,7 +147,7 @@ export class RvmViewer3D {
         this._isOrthographic = false;
 
         // WebGL Renderer
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", preserveDrawingBuffer: true });
         this.renderer.setSize(width, height);
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.localClippingEnabled = true; // Critical for section planes
@@ -235,7 +341,228 @@ export class RvmViewer3D {
         this.sectioning.disableSection();
     }
 
-    getNavMode() {
+
+
+    _onPointerDown(event) {
+        if (!this.marqueeModeEnabled) return;
+        if (event.button !== 0) return; // Only left click
+        this.isMarqueeDragging = true;
+        const rect = this.container.getBoundingClientRect();
+        this.marqueeStart.x = event.clientX - rect.left;
+        this.marqueeStart.y = event.clientY - rect.top;
+        this.marqueeElement.style.left = this.marqueeStart.x + 'px';
+        this.marqueeElement.style.top = this.marqueeStart.y + 'px';
+        this.marqueeElement.style.width = '0px';
+        this.marqueeElement.style.height = '0px';
+        this.marqueeElement.style.display = 'block';
+    }
+
+    _onPointerMove(event) {
+        if (!this.isMarqueeDragging) return;
+        const rect = this.container.getBoundingClientRect();
+        const currentX = event.clientX - rect.left;
+        const currentY = event.clientY - rect.top;
+
+        const left = Math.min(this.marqueeStart.x, currentX);
+        const top = Math.min(this.marqueeStart.y, currentY);
+        const width = Math.abs(currentX - this.marqueeStart.x);
+        const height = Math.abs(currentY - this.marqueeStart.y);
+
+        this.marqueeElement.style.left = left + 'px';
+        this.marqueeElement.style.top = top + 'px';
+        this.marqueeElement.style.width = width + 'px';
+        this.marqueeElement.style.height = height + 'px';
+    }
+
+    _onPointerUp(event) {
+        if (!this.isMarqueeDragging) return;
+        this.isMarqueeDragging = false;
+        this.marqueeElement.style.display = 'none';
+
+        const rect = this.container.getBoundingClientRect();
+        const endX = event.clientX - rect.left;
+        const endY = event.clientY - rect.top;
+
+        const width = Math.abs(endX - this.marqueeStart.x);
+        const height = Math.abs(endY - this.marqueeStart.y);
+
+        // Ignore small clicks
+        if (width < 5 || height < 5) return;
+
+        const minX = Math.min(this.marqueeStart.x, endX);
+        const maxX = Math.max(this.marqueeStart.x, endX);
+        const minY = Math.min(this.marqueeStart.y, endY);
+        const maxY = Math.max(this.marqueeStart.y, endY);
+
+        // Convert 2D rect to frustum points on an arbitrary plane to find bounding sphere
+        // For a true marquee zoom, we want to set the camera such that these screen coordinates map to the viewport edges.
+        // A simpler robust approach: cast rays from the 4 corners, find intersections, get bounding box of those points, and fit it.
+
+        const corners = [
+            { x: (minX / rect.width) * 2 - 1, y: -(minY / rect.height) * 2 + 1 }, // Top Left
+            { x: (maxX / rect.width) * 2 - 1, y: -(minY / rect.height) * 2 + 1 }, // Top Right
+            { x: (maxX / rect.width) * 2 - 1, y: -(maxY / rect.height) * 2 + 1 }, // Bottom Right
+            { x: (minX / rect.width) * 2 - 1, y: -(maxY / rect.height) * 2 + 1 }  // Bottom Left
+        ];
+
+        const intersectPoints = [];
+        for (const corner of corners) {
+            this.raycaster.setFromCamera(corner, this.camera);
+            const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+            const valid = intersects.find(i => i.object.type === 'Mesh' || i.object.type === 'Line');
+            if (valid) {
+                intersectPoints.push(valid.point);
+            }
+        }
+
+        if (intersectPoints.length > 0) {
+            const box = new THREE.Box3();
+            for (const pt of intersectPoints) {
+                box.expandByPoint(pt);
+            }
+
+            // Add some padding
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z) || 1;
+            box.expandByScalar(maxDim * 0.1);
+
+            this._fitBox(box);
+        } else {
+             // Fallback if no geometry was intersected: just move the camera forward
+             this.controls.target.add(this.camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(10));
+             this.camera.position.add(this.camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(10));
+             this.controls.update();
+        }
+    }
+
+    _fitBox(box) {
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const fov = this.camera.fov * (Math.PI / 180);
+        let cameraZ = Math.abs(maxDim / (2 * Math.tan(fov / 2)));
+
+        // Adjust for aspect ratio
+        cameraZ /= Math.min(1, this.camera.aspect);
+
+        const offset = this.camera.position.clone().sub(this.controls.target).normalize().multiplyScalar(cameraZ);
+        this.camera.position.copy(center).add(offset);
+        this.camera.lookAt(center);
+        this.controls.target.copy(center);
+        this.controls.update();
+    }
+_onCanvasClick(event) {
+        if (!this.measureModeEnabled) {
+            if (this._navMode === 'select' && this.selection) {
+                const rect = this.renderer.domElement.getBoundingClientRect();
+                const mouse = new THREE.Vector2();
+                mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+                this.raycaster.setFromCamera(mouse, this.camera);
+                const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+                const validIntersects = intersects.filter(i => i.object.type === 'Mesh');
+                if (validIntersects.length > 0) {
+                    const obj = validIntersects[0].object;
+                    if (obj.name) {
+                        this.selection.selectByRenderIds([obj.name]);
+                    }
+                } else {
+                    this.selection.clear();
+                }
+            }
+            return;
+        }
+
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+        const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+
+        // Filter out helper objects
+        const validIntersects = intersects.filter(i => i.object.type === 'Mesh' || i.object.type === 'Line');
+
+        if (validIntersects.length > 0) {
+            const point = validIntersects[0].point;
+            this.measurePoints.push(point);
+
+            if (this.measurePoints.length === 1) {
+                // First point selected, show a marker
+                this._createMeasureMarker(point, "P1");
+            } else if (this.measurePoints.length === 2) {
+                // Second point selected, draw line and distance
+                this._createMeasureMarker(point, "P2");
+                this._drawMeasureLine(this.measurePoints[0], this.measurePoints[1]);
+            } else {
+                // Reset and start over
+                this.clearMeasurement();
+                this.measurePoints.push(point);
+                this._createMeasureMarker(point, "P1");
+            }
+            this.renderer.render(this.scene, this.camera);
+            this.labelRenderer.render(this.scene, this.camera);
+        }
+    }
+
+    _createMeasureMarker(point, text) {
+        const div = document.createElement('div');
+        div.className = 'rvm-measure-label';
+        div.textContent = text;
+        div.style.background = '#222';
+        div.style.color = '#fff';
+        div.style.padding = '2px 4px';
+        div.style.borderRadius = '3px';
+        div.style.fontSize = '10px';
+        div.style.pointerEvents = 'none';
+
+        let label;
+        if (typeof CSS2DObject !== 'undefined') {
+            label = new CSS2DObject(div);
+        } else if (window.THREE && window.THREE.CSS2DObject) {
+            label = new window.THREE.CSS2DObject(div);
+        }
+
+        if (label) {
+            label.position.copy(point);
+            this.scene.add(label);
+            this.measureLabels.push(label);
+        }
+    }
+
+    _drawMeasureLine(p1, p2) {
+        const geometry = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+        const material = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 2, depthTest: false });
+        this.measureLine = new THREE.Line(geometry, material);
+        this.scene.add(this.measureLine);
+
+        const dist = p1.distanceTo(p2);
+
+        // Midpoint label
+        const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+        this._createMeasureMarker(mid, `${dist.toFixed(3)} m`);
+    }
+
+    clearMeasurement() {
+        if (this.measureLine) {
+            this.scene.remove(this.measureLine);
+            if(this.measureLine.geometry) this.measureLine.geometry.dispose();
+            if(this.measureLine.material) this.measureLine.material.dispose();
+            this.measureLine = null;
+        }
+        for (const label of this.measureLabels) {
+            this.scene.remove(label);
+        }
+        this.measureLabels = [];
+        this.measurePoints = [];
+    }
+getNavMode() {
         return this._navMode;
     }
 
@@ -243,9 +570,32 @@ export class RvmViewer3D {
         this._navMode = mode;
         if (mode === 'orbit') {
             this.controls.enabled = true;
-            // Handle measure off, etc.
+            this.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+            this.measureModeEnabled = false;
+            this.clearMeasurement();
+        } else if (mode === 'pan') {
+            this.controls.enabled = true;
+            this.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+            this.measureModeEnabled = false;
+            this.clearMeasurement();
+        } else if (mode === 'select') {
+            this.controls.enabled = true;
+            this.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+            this.measureModeEnabled = false;
+            this.clearMeasurement();
+        } else if (mode === 'Measure') {
+            this.controls.enabled = false;
+            this.measureModeEnabled = true;
+            this.marqueeModeEnabled = false;
+        } else if (mode === 'Zoom') {
+            this.controls.enabled = false;
+            this.measureModeEnabled = false;
+            this.marqueeModeEnabled = true;
+            this.clearMeasurement();
         } else {
-            // e.g. measure mode
+            this.controls.enabled = true;
+            this.measureModeEnabled = false;
+            this.marqueeModeEnabled = false;
         }
     }
 
@@ -436,6 +786,17 @@ export class RvmViewer3D {
 
     dispose() {
         this._disposed = true;
+        this.container.removeEventListener('click', this._onCanvasClick);
+        if (this._onDoubleClickLocal) { this.container.removeEventListener('dblclick', this._onDoubleClickLocal); }
+        this.container.removeEventListener('pointerdown', this._onPointerDown);
+        this.container.removeEventListener('pointermove', this._onPointerMove);
+        if (this.hoverMoveHandler) { this.container.removeEventListener('pointermove', this.hoverMoveHandler); }
+        window.removeEventListener('pointerup', this._onPointerUp);
+        if (this.marqueeElement && this.marqueeElement.parentNode) {
+            this.marqueeElement.parentNode.removeChild(this.marqueeElement);
+        }
+        this.clearMeasurement();
+        if (this._clearHover) { this._clearHover(); }
         cancelAnimationFrame(this._animationFrameId);
 
 
