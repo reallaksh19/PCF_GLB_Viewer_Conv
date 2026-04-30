@@ -5,6 +5,7 @@ import { detectRvmCapabilities } from '../rvm/RvmCapabilities.js';
 import { notify } from '../diagnostics/notification-center.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js';
 import { parseRmssAttributes } from '../converters/rmss-attribute-parser.js';
+import { downloadText } from '../pcfx/Pcfx_FileIO.js';
 
 let _viewer = null;
 let _shortcutHandler = null;
@@ -120,13 +121,7 @@ function _bindBundleLoader(container) {
           notify({ type: 'info', message: `Converted RMSS Attributes to JSON hierarchy` });
 
           // Offer download "Save As"
-          const blob = new Blob([JSON.stringify(hierarchyJson, null, 2)], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = file.name + '.json';
-          a.click();
-          URL.revokeObjectURL(url);
+          downloadText(JSON.stringify(hierarchyJson, null, 2), file.name + '.json', 'application/json');
       } catch (err) {
           notify({ type: 'error', message: `Failed to parse Attributes file: ${err.message}` });
       }

@@ -209,6 +209,41 @@ export class AvevaJsonLoader {
             for (const child of element.children) {
                 traverse(child, group, currentPath);
             }
+
+            // Draw pipes between components for RMSS JSON structure
+            if (element.type === 'BRANCH' && element.children.length > 1) {
+                let radius = 0.05;
+                if (element.attributes) {
+                    if (element.attributes.HBOR) radius = parseFloat(element.attributes.HBOR) / 2;
+                    else if (element.attributes.TBOR) radius = parseFloat(element.attributes.TBOR) / 2;
+                }
+                radius = Math.max(radius, 0.05);
+
+                for (let i = 0; i < element.children.length - 1; i++) {
+                    const c1 = element.children[i];
+                    const c2 = element.children[i+1];
+
+                    const p1 = (c1.attributes && c1.attributes.LPOS) ? c1.attributes.LPOS : (c1.attributes && c1.attributes.APOS);
+                    const p2 = (c2.attributes && c2.attributes.APOS) ? c2.attributes.APOS : null;
+
+                    if (p1 && p2) {
+                        const dx = p2.x - p1.x;
+                        const dy = p2.y - p1.y;
+                        const dz = p2.z - p1.z;
+                        const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                        if (dist > 0.01) {
+                            const pipeGeom = new THREE.CylinderGeometry(radius, radius, dist, 12);
+                            const pipeMat = new THREE.MeshStandardMaterial({ color: 0x3d74c5 });
+                            const pipeMesh = new THREE.Mesh(pipeGeom, pipeMat);
+                            pipeMesh.position.set(p1.x + dx/2, p1.y + dy/2, p1.z + dz/2);
+                            const axis = new THREE.Vector3(0, 1, 0);
+                            const targetVec = new THREE.Vector3(dx, dy, dz).normalize();
+                            pipeMesh.quaternion.setFromUnitVectors(axis, targetVec);
+                            group.add(pipeMesh);
+                        }
+                    }
+                }
+            }
         }
     }
 
