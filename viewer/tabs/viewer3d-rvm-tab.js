@@ -4,9 +4,7 @@ import { on, off, emit } from '../core/event-bus.js';
 import { detectRvmCapabilities } from '../rvm/RvmCapabilities.js';
 import { notify } from '../diagnostics/notification-center.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js';
-import { RvmSearchIndex } from '../rvm/RvmSearchIndex.js';
 import { parseRmssAttributes } from '../converters/rmss-attribute-parser.js';
-import { downloadText } from '../pcfx/Pcfx_FileIO.js';
 
 let _viewer = null;
 let _shortcutHandler = null;
@@ -78,7 +76,7 @@ function _disposeRvmViewer() {
   }
   if (_viewer) {
     _viewer.dispose();
-    _viewer.treeModel = null; _viewer = null;
+    _viewer = null;
   }
   if (_resizeObserver) {
     _resizeObserver.disconnect();
@@ -112,8 +110,6 @@ function _bindBundleLoader(container) {
       try {
           const text = await file.text();
           const hierarchyJson = parseRmssAttributes(text);
-
-          downloadText(JSON.stringify(hierarchyJson, null, 2), file.name + '.json', 'application/json');
 
           emit(RuntimeEvents.FILE_LOADED, {
               name: file.name + '.json',
@@ -164,6 +160,7 @@ function _bindBundleLoader(container) {
 // ── Search handler ──────────────────────────────────────────────────────────
 
 
+
 function _bindAttrSearch(container) {
   const input = container.querySelector('#rvm-attr-search');
   if (!input) return;
@@ -195,17 +192,21 @@ function _bindSearch(container) {
             const items = list.querySelectorAll('li');
             items.forEach(li => {
                 li.addEventListener('click', () => {
-                   _viewer.selectByCanonicalId(li.dataset.id); _viewer.fitSelection();
+                   if (_viewer && li.dataset.id) {
+                       _viewer.selectByCanonicalId(li.dataset.id);
+                       _viewer.fitSelection();
+                   }
                 });
             });
          }
       }
-
     }, 180);
   });
 }
 
+
 // ── Keyboard shortcuts ──────────────────────────────────────────────────────
+
 
 function _bindShortcuts(container) {
   if (_shortcutHandler) {
@@ -217,10 +218,18 @@ function _bindShortcuts(container) {
     const tag = document.activeElement?.tagName?.toLowerCase();
     if (tag === 'input' || tag === 'textarea') return;
     if (e.key === 'f' || e.key === 'F') { _viewer?.fitAll?.(); }
-    if (e.key === 'Escape') { _viewer?.clearSelection?.(); }
+    if (e.key === 'Escape') {
+        _viewer?.clearSelection?.();
+        _viewer?.setNavMode?.('orbit');
+        container.querySelectorAll('.rvm-tool-btn').forEach(b => {
+            b.classList.remove('active');
+            if (b.dataset.action === 'NAV_ORBIT') b.classList.add('active');
+        });
+    }
   };
   window.addEventListener('keydown', _shortcutHandler);
 }
+
 
 // ── HTML scaffold ───────────────────────────────────────────────────────────
 
@@ -252,10 +261,6 @@ function _buildHTML(caps) {
           ${icon}<span>${ACTION_LABELS[id] || id}</span>
         </button>
       `).join('')}
-      <div style="border-left:1px solid #444;margin:0 5px;height:24px;"></div>
-      <button class="rvm-tool-btn" data-action="TAKE_SNAPSHOT" title="Take View Snapshot">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><span>Snapshot</span>
-      </button>
     </div>
     <div class="rvm-ribbon-section rvm-ribbon-search">
       <input type="search" id="rvm-search-input" placeholder="Search objects…" autocomplete="off">
@@ -272,10 +277,13 @@ function _buildHTML(caps) {
     <div class="rvm-viewport" id="rvm-viewport">
       <canvas class="rvm-canvas" id="rvm-canvas"></canvas>
     </div>
+
+
     <div class="geo-right-panel rvm-right-panel">
       <div class="rvm-panel-header">Attributes</div>
       <input type="text" id="rvm-attr-search" placeholder="Filter attributes..." style="width: 100%; box-sizing: border-box; padding: 4px; background: #222; color: #fff; border: 1px solid #444;">
       <div id="rvm-attributes-content" class="rvm-attributes-panel"></div>
+
       <div class="rvm-panel-header">Review Tags</div>
       <div style="display:flex;gap:5px;padding:5px;background:#1a1a1a;">
         <select id="rvm-tag-severity-filter" style="flex:1;background:#333;color:#fff;border:1px solid #555;">
@@ -296,6 +304,7 @@ function _buildHTML(caps) {
       <div id="rvm-tag-list" class="rvm-tag-list"></div>
       <button class="rvm-btn" id="rvm-add-tag-btn" disabled>+ Add Tag</button>
     </div>
+
   </div>
 </div>`.trim();
 }
@@ -313,8 +322,6 @@ function _bindToolbarActions(container) {
       case 'NAV_ORBIT':   _viewer?.setNavMode?.('orbit'); break;
       case 'NAV_PAN':     _viewer?.setNavMode?.('pan'); break;
       case 'NAV_SELECT':  _viewer?.setNavMode?.('select'); break;
-      case 'MEASURE_TOOL': _viewer?.setNavMode?.('Measure'); break;
-      case 'VIEW_MARQUEE_ZOOM': _viewer?.setNavMode?.('Zoom'); break;
       case 'NAV_PLAN_X':  _viewer?.snapToPreset?.('TOP'); break;
       case 'NAV_ROTATE_Y': _viewer?.snapToPreset?.('FRONT'); break;
       case 'NAV_ROTATE_Z': _viewer?.snapToPreset?.('RIGHT'); break;
@@ -328,18 +335,6 @@ function _bindToolbarActions(container) {
       case 'SECTION_BOX': _viewer?.setSectionMode?.('BOX'); break;
       case 'SECTION_PLANE_UP': _viewer?.setSectionMode?.('PLANE_UP'); break;
       case 'SECTION_DISABLE': _viewer?.disableSection?.(); break;
-      case 'TAKE_SNAPSHOT': {
-        if (_viewer && _viewer.renderer) {
-            _viewer.renderer.render(_viewer.scene, _viewer.camera);
-            const dataURL = _viewer.renderer.domElement.toDataURL('image/png');
-            const a = document.createElement('a');
-            a.href = dataURL;
-            a.download = `rvm_snapshot_${Date.now()}.png`;
-            a.click();
-            notify({ type: 'success', message: 'Snapshot downloaded successfully' });
-        }
-        break;
-      }
     }
   });
 }
@@ -358,9 +353,16 @@ function _bindResize(container) {
 
 // ── Tab event listener (TAB_CHANGED) ───────────────────────────────────────
 
+
 function _bindTabListener() {
   const tabChangedCallback = ({ tabId }) => {
-    if (tabId !== 'viewer3d-rvm') { const root = document.querySelector('.rvm-tab-root'); if (root) root.style.display = 'none'; } else { const root = document.querySelector('.rvm-tab-root'); if (root) root.style.display = ''; }
+    if (tabId !== 'viewer3d-rvm') {
+       const root = document.querySelector('.rvm-tab-root');
+       if (root) root.style.display = 'none';
+    } else {
+       const root = document.querySelector('.rvm-tab-root');
+       if (root) root.style.display = '';
+    }
   };
   const modelLoadedCallback = (payload) => {
     if (_viewer && payload && payload.gltf && payload.gltf.scene) {
@@ -371,7 +373,6 @@ function _bindTabListener() {
             _viewer.searchIndex = new RvmSearchIndex(payload.indexJson, payload.identityMap);
             _viewer.searchIndex.build();
         }
-
 
         const container = document.querySelector('.rvm-tab-root');
         if (container && payload.indexJson && payload.indexJson.nodes) {
@@ -400,6 +401,7 @@ function _bindTabListener() {
         }
     }
   };
+
 
   on(RuntimeEvents.TAB_CHANGED, tabChangedCallback);
   on(RuntimeEvents.RVM_MODEL_LOADED, modelLoadedCallback);
@@ -539,7 +541,6 @@ function _renderTagList(container, filter = 'all') {
         });
     });
 }
-
 
 function _bindTags(container) {
   const filterSelect = container.querySelector('#rvm-tag-severity-filter');

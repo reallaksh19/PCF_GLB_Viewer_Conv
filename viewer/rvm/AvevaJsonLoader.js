@@ -102,9 +102,6 @@ export class AvevaJsonLoader {
             } else if (element.type === 'TEE' || element.type === 'OLET') {
                 geometry = new THREE.CylinderGeometry(radius, radius, length, 16);
                 material = new THREE.MeshStandardMaterial({ color: 0x55aa55 });
-            } else if (element.type === 'TUBI' || element.type === 'PIPE') {
-                geometry = new THREE.CylinderGeometry(radius, radius, length, 16);
-                material = new THREE.MeshStandardMaterial({ color: 0x3d74c5 });
             } else {
                 geometry = new THREE.CylinderGeometry(radius, radius, length, 16);
                 material = new THREE.MeshStandardMaterial({ color: 0x3d74c5 });
