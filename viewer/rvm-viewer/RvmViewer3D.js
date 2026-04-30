@@ -450,7 +450,26 @@ export class RvmViewer3D {
         this.controls.update();
     }
 _onCanvasClick(event) {
-        if (!this.measureModeEnabled) return;
+        if (!this.measureModeEnabled) {
+            if (this._navMode === 'select' && this.selection) {
+                const rect = this.renderer.domElement.getBoundingClientRect();
+                const mouse = new THREE.Vector2();
+                mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+                this.raycaster.setFromCamera(mouse, this.camera);
+                const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+                const validIntersects = intersects.filter(i => i.object.type === 'Mesh');
+                if (validIntersects.length > 0) {
+                    const obj = validIntersects[0].object;
+                    if (obj.name) {
+                        this.selection.selectByRenderIds([obj.name]);
+                    }
+                } else {
+                    this.selection.clear();
+                }
+            }
+            return;
+        }
 
         const rect = this.renderer.domElement.getBoundingClientRect();
         this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -543,14 +562,17 @@ getNavMode() {
         this._navMode = mode;
         if (mode === 'orbit') {
             this.controls.enabled = true;
+            this.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
             this.measureModeEnabled = false;
             this.clearMeasurement();
         } else if (mode === 'pan') {
             this.controls.enabled = true;
+            this.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
             this.measureModeEnabled = false;
             this.clearMeasurement();
         } else if (mode === 'select') {
             this.controls.enabled = true;
+            this.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
             this.measureModeEnabled = false;
             this.clearMeasurement();
         } else if (mode === 'Measure') {

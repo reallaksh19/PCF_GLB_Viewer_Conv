@@ -4,6 +4,7 @@ import { on, off, emit } from '../core/event-bus.js';
 import { detectRvmCapabilities } from '../rvm/RvmCapabilities.js';
 import { notify } from '../diagnostics/notification-center.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js';
+import { RvmSearchIndex } from '../rvm/RvmSearchIndex.js';
 import { parseRmssAttributes } from '../converters/rmss-attribute-parser.js';
 import { downloadText } from '../pcfx/Pcfx_FileIO.js';
 
@@ -185,6 +186,21 @@ function _bindSearch(container) {
     _debounce = setTimeout(() => {
       const query = input.value.trim();
       emit(RuntimeEvents.RVM_SEARCH_CHANGED, { query });
+
+      if (_viewer && _viewer.searchIndex) {
+         const results = _viewer.searchIndex.search(query);
+         const list = container.querySelector('#rvm-search-results');
+         if (list) {
+            list.innerHTML = results.map(r => `<li style="cursor:pointer;" data-id="${r.canonicalObjectId}">${r.name || r.canonicalObjectId}</li>`).join('');
+            const items = list.querySelectorAll('li');
+            items.forEach(li => {
+                li.addEventListener('click', () => {
+                   _viewer.selectByCanonicalId(li.dataset.id);
+                });
+            });
+         }
+      }
+
     }, 180);
   });
 }
@@ -351,7 +367,24 @@ function _bindTabListener() {
         _viewer.setModel(payload.gltf.scene, payload.manifest?.runtime?.upAxis);
         _viewer.fitAll();
 
+        if (payload.indexJson && payload.identityMap) {
+            _viewer.searchIndex = new RvmSearchIndex(payload.indexJson, payload.identityMap);
+            _viewer.searchIndex.build();
+        }
+
         const container = document.querySelector('.rvm-tab-root');
+        if (container && payload.indexJson && payload.indexJson.nodes) {
+            const tree = container.querySelector('#rvm-hierarchy-tree');
+            if (tree) {
+                // simple render
+                tree.innerHTML = payload.indexJson.nodes.slice(0, 100).map(n => `<li style="cursor:pointer;" data-id="${n.canonicalObjectId}">${n.name || n.canonicalObjectId}</li>`).join('') + (payload.indexJson.nodes.length > 100 ? '<li>...</li>' : '');
+                tree.querySelectorAll('li[data-id]').forEach(li => {
+                    li.addEventListener('click', () => {
+                        _viewer.selectByCanonicalId(li.dataset.id);
+                    });
+                });
+            }
+        }
         if (container) {
             const exportBtn = container.querySelector('#rvm-export-tags-btn');
             if (exportBtn) exportBtn.disabled = false;
