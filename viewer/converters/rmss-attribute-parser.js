@@ -48,7 +48,7 @@ function parseRmssAttributes(content) {
 
   const branches = allObjects.filter(o => o.attributes.TYPE === 'BRAN');
   const relevantComponents = allObjects.filter(o =>
-    ['VALV', 'FLAN', 'ELBO', 'TEE', 'OLET', 'GASK', 'ATTA', 'TUBI', 'PIPE', 'BEND'].includes(o.attributes.TYPE)
+    ['VALV', 'FLAN', 'ELBO', 'TEE', 'OLET', 'GASK', 'ATTA'].includes(o.attributes.TYPE)
   );
 
   const branchMap = new Map();
@@ -78,15 +78,14 @@ function parseRmssAttributes(content) {
       const apos = parseCoord(comp.attributes.APOS);
       const lpos = parseCoord(comp.attributes.LPOS);
 
-      node.attributes = { APOS: apos, LPOS: lpos };
-
-      if (t === 'FLAN') {
-        node.attributes.DTXR = comp.attributes.DTXR;
-      } else if (t === 'ELBO' || t === 'TEE' || t === 'OLET' || t === 'BEND') {
-        node.attributes.ANGL = comp.attributes.ANGL;
-        node.attributes.DTXR = comp.attributes.DTXR;
+      if (t === 'VALV') {
+        node.attributes = { APOS: apos, LPOS: lpos };
+      } else if (t === 'FLAN') {
+        node.attributes = { DTXR: comp.attributes.DTXR, APOS: apos, LPOS: lpos };
+      } else if (t === 'ELBO' || t === 'TEE' || t === 'OLET') {
+        node.attributes = { ANGL: comp.attributes.ANGL, DTXR: comp.attributes.DTXR, APOS: apos, LPOS: lpos };
       } else if (t === 'GASK') {
-        node.attributes.DTXR = comp.attributes.DTXR;
+        node.attributes = { DTXR: comp.attributes.DTXR, APOS: apos, LPOS: lpos };
       } else if (t === 'ATTA') {
         if (comp.attributes.CMPSUPTYPE) {
           node.type = 'SUPPORT';
@@ -100,8 +99,6 @@ function parseRmssAttributes(content) {
         } else {
           continue; // Skip non-support ATTAs
         }
-      } else if (t === 'TUBI' || t === 'PIPE') {
-         // tubi/pipe uses apos/lpos as well
       }
 
       branchMap.get(owner).children.push(node);
@@ -109,48 +106,7 @@ function parseRmssAttributes(content) {
   }
 
   // Filter out branches that have no relevant children
-  return Array.from(branchMap.values()).filter(b => b.children.length > 0).map(branch => {
-      // Topology Builder: Connect fittings based on fitting's start/end vectors to build pipes.
-      // Remove any previously parsed TUBI/PIPE elements since they are unreliable.
-      let fittings = branch.children.filter(c => c.type !== 'TUBI' && c.type !== 'PIPE');
-
-      // Connect adjacent fittings with a generated PIPE if their distance is significant
-      const newChildren = [];
-      for (let i = 0; i < fittings.length; i++) {
-          newChildren.push(fittings[i]);
-
-          if (i < fittings.length - 1) {
-              const currentFitting = fittings[i];
-              const nextFitting = fittings[i+1];
-
-              if (currentFitting.attributes && currentFitting.attributes.LPOS &&
-                  nextFitting.attributes && nextFitting.attributes.APOS) {
-
-                  const p1 = currentFitting.attributes.LPOS;
-                  const p2 = nextFitting.attributes.APOS;
-
-                  const dx = p2.x - p1.x;
-                  const dy = p2.y - p1.y;
-                  const dz = p2.z - p1.z;
-
-                  // If distance > 1mm, assume there is a pipe between them
-                  const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-                  if (dist > 1) {
-                      newChildren.push({
-                          name: `${branch.name}-GEN-PIPE-${i}`,
-                          type: 'PIPE',
-                          attributes: {
-                              APOS: p1,
-                              LPOS: p2
-                          }
-                      });
-                  }
-              }
-          }
-      }
-      branch.children = newChildren;
-      return branch;
-  });
+  return Array.from(branchMap.values()).filter(b => b.children.length > 0);
 }
 
 // Ensure we export it properly for both ES modules and CommonJS

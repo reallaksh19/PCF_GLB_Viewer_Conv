@@ -133,53 +133,26 @@ function _buildTabBar() {
   });
 }
 
-
 function _switchTab(tabId) {
   const content = document.getElementById('tab-content');
   setActiveTab(tabId);
   emit(RuntimeEvents.TAB_CHANGED, { tabId });
-
-  // Do not empty innerHTML for RVM viewer, let it hide its children via CSS or just append
-  // Actually, wait, other tabs expect innerHTML = ''. Let's just hide the RVM tab root if it exists
-
   if (_activeDestroyFn) {
     try { _activeDestroyFn(); } catch (err) { console.error(err); }
     _activeDestroyFn = null;
   }
-
-  // Clean up content, but save the RVM tab root if it exists
-  const rvmRoot = content.querySelector('.rvm-tab-root');
-  if (rvmRoot) {
-     document.body.appendChild(rvmRoot);
-     rvmRoot.style.display = 'none';
-  }
-
   content.innerHTML = '';
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tabId);
   });
-
   const tabDef = _visibleTabs.find(t => t.id === tabId);
   if (tabDef && tabDef.render) {
-    if (tabId === 'viewer3d-rvm') {
-        const existingRvmRoot = document.body.querySelector('.rvm-tab-root');
-        if (existingRvmRoot) {
-             content.appendChild(existingRvmRoot);
-             existingRvmRoot.style.display = '';
-             // trigger resize
-             window.dispatchEvent(new Event('resize'));
-             // restore active destroy function
-             _activeDestroyFn = () => {};
-             return;
-        }
-    }
     const destroyFn = tabDef.render(content);
     if (typeof destroyFn === 'function') {
       _activeDestroyFn = destroyFn;
     }
   }
 }
-
 
 async function _loadVisibleTabs() {
   try {
