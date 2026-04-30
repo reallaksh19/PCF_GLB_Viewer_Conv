@@ -97,6 +97,202 @@ export class RvmViewer3D {
 
         // Save views config
         this._savedView = null;
+
+        // Pointer events for tools
+        this._bindToolEvents();
+    }
+
+    _hoveredMesh = null;
+    _hoveredOriginalEmissive = null;
+
+    _clearMeasure() {
+        if (this._measureLine) {
+            this.scene.remove(this._measureLine);
+            this._measureLine = null;
+        }
+        if (this._measureLabel) {
+            this.scene.remove(this._measureLabel);
+            this._measureLabel = null;
+        }
+    }
+
+    _bindToolEvents() {
+        let isDragging = false;
+        let startPoint = { x: 0, y: 0 };
+        let marqueeBox = null;
+
+        let measureStart = null;
+
+        this.renderer.domElement.addEventListener('pointerdown', (e) => {
+            if (this._navMode === 'zoom' && e.button === 0) {
+                isDragging = true;
+                startPoint = { x: e.offsetX, y: e.offsetY };
+                marqueeBox = document.createElement('div');
+                marqueeBox.style.cssText = `position: absolute; border: 2px dashed #4a9eff; background: rgba(74, 158, 255, 0.2); left: ${startPoint.x}px; top: ${startPoint.y}px; width: 0; height: 0; pointer-events: none;`;
+                this._toolsOverlay.appendChild(marqueeBox);
+                this.controls.enabled = false;
+            }
+
+            if (this._navMode === 'measure' && e.button === 0) {
+                const raycaster = new THREE.Raycaster();
+                const mouse = new THREE.Vector2(
+                    (e.offsetX / this.container.clientWidth) * 2 - 1,
+                    -(e.offsetY / this.container.clientHeight) * 2 + 1
+                );
+                raycaster.setFromCamera(mouse, this.camera);
+                const intersects = raycaster.intersectObject(this.modelGroup, true);
+
+                if (intersects.length > 0) {
+                    const pt = intersects[0].point;
+                    if (!measureStart) {
+                        this._clearMeasure();
+                        measureStart = pt;
+                    } else {
+                        const dist = measureStart.distanceTo(pt);
+
+                        const geom = new THREE.BufferGeometry().setFromPoints([measureStart, pt]);
+                        const mat = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 2, depthTest: false });
+                        this._measureLine = new THREE.Line(geom, mat);
+                        this._measureLine.renderOrder = 999;
+                        this.scene.add(this._measureLine);
+
+                        const div = document.createElement('div');
+                        div.className = 'rvm-measure-label';
+                        div.style.cssText = 'background: rgba(0,0,0,0.8); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px; pointer-events: none; border: 1px solid #ff0000;';
+                        div.textContent = dist.toFixed(3) + ' m';
+
+                        // Support for CSS2DObject
+                        if (typeof CSS2DObject !== 'undefined') {
+                            this._measureLabel = new CSS2DObject(div);
+                        } else if (window.THREE && window.THREE.CSS2DObject) {
+                            this._measureLabel = new window.THREE.CSS2DObject(div);
+                        } else {
+                            this._measureLabel = new THREE.Object3D();
+                            this._measureLabel.isCSS2DObject = true;
+                        }
+
+                        if (this._measureLabel) {
+                            const mid = measureStart.clone().lerp(pt, 0.5);
+                            this._measureLabel.position.copy(mid);
+                            this.scene.add(this._measureLabel);
+                        }
+
+                        measureStart = null;
+                    }
+                }
+            }
+        });
+
+        this.renderer.domElement.addEventListener('pointermove', (e) => {
+            if (isDragging && marqueeBox && this._navMode === 'zoom') {
+                const currentPoint = { x: e.offsetX, y: e.offsetY };
+                const left = Math.min(startPoint.x, currentPoint.x);
+                const top = Math.min(startPoint.y, currentPoint.y);
+                const width = Math.abs(currentPoint.x - startPoint.x);
+                const height = Math.abs(currentPoint.y - startPoint.y);
+                marqueeBox.style.left = left + 'px';
+                marqueeBox.style.top = top + 'px';
+                marqueeBox.style.width = width + 'px';
+                marqueeBox.style.height = height + 'px';
+            }
+
+            // Interactive Hover
+            if (!isDragging && this._navMode !== 'zoom' && this._navMode !== 'measure') {
+                const raycaster = new THREE.Raycaster();
+                const mouse = new THREE.Vector2(
+                    (e.offsetX / this.container.clientWidth) * 2 - 1,
+                    -(e.offsetY / this.container.clientHeight) * 2 + 1
+                );
+                raycaster.setFromCamera(mouse, this.camera);
+                const intersects = raycaster.intersectObject(this.modelGroup, true);
+
+                if (intersects.length > 0) {
+                    const mesh = intersects[0].object;
+                    if (this._hoveredMesh !== mesh) {
+                        if (this._hoveredMesh && this._hoveredMesh.material && this._hoveredMesh.material.emissive) {
+                            this._hoveredMesh.material.emissive.setHex(this._hoveredOriginalEmissive);
+                        }
+                        this._hoveredMesh = mesh;
+                        if (mesh.material && mesh.material.emissive) {
+                            this._hoveredOriginalEmissive = mesh.material.emissive.getHex();
+                            mesh.material.emissive.setHex(0x555555); // Highlight
+                        }
+                    }
+                } else if (this._hoveredMesh) {
+                    if (this._hoveredMesh.material && this._hoveredMesh.material.emissive) {
+                        this._hoveredMesh.material.emissive.setHex(this._hoveredOriginalEmissive);
+                    }
+                    this._hoveredMesh = null;
+                }
+            }
+        });
+
+        this.renderer.domElement.addEventListener('pointerup', (e) => {
+            if (this._navMode === 'zoom' && isDragging) {
+                isDragging = false;
+                if (marqueeBox) {
+                    const width = parseInt(marqueeBox.style.width) || 0;
+                    const height = parseInt(marqueeBox.style.height) || 0;
+
+                    this._toolsOverlay.removeChild(marqueeBox);
+                    marqueeBox = null;
+
+                    if (width > 10 && height > 10) {
+                        const canvasWidth = this.container.clientWidth;
+                        const canvasHeight = this.container.clientHeight;
+                        const zoomFactorX = canvasWidth / width;
+                        const zoomFactorY = canvasHeight / height;
+                        const zoomFactor = Math.min(zoomFactorX, zoomFactorY);
+
+                        const boxCenter = new THREE.Vector2(
+                            ((startPoint.x + e.offsetX) / 2 / canvasWidth) * 2 - 1,
+                            -((startPoint.y + e.offsetY) / 2 / canvasHeight) * 2 + 1
+                        );
+
+                        const raycaster = new THREE.Raycaster();
+                        raycaster.setFromCamera(boxCenter, this.camera);
+
+                        // Move camera forward along ray by a factor related to the area
+                        const dist = this.camera.position.distanceTo(this.controls.target);
+                        const forwardDist = dist * (1 - 1/zoomFactor);
+
+                        this.camera.position.addScaledVector(raycaster.ray.direction, forwardDist);
+                        this.controls.target.addScaledVector(raycaster.ray.direction, forwardDist);
+                        this.controls.update();
+                    }
+                    this.setNavMode('orbit'); // Auto exit tool
+                }
+            }
+        });
+
+        this.renderer.domElement.addEventListener('dblclick', (e) => {
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2(
+                (e.offsetX / this.container.clientWidth) * 2 - 1,
+                -(e.offsetY / this.container.clientHeight) * 2 + 1
+            );
+            raycaster.setFromCamera(mouse, this.camera);
+            const intersects = raycaster.intersectObject(this.modelGroup, true);
+
+            if (intersects.length > 0) {
+                const object = intersects[0].object;
+                const box = new THREE.Box3().setFromObject(object);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+
+                this.controls.target.copy(center);
+
+                const maxDim = Math.max(size.x, size.y, size.z, 1.0); // Fallback if size is 0
+                const fitHeightDistance = maxDim / (2 * Math.tan(Math.PI * this.camera.fov / 360));
+                const fitWidthDistance = fitHeightDistance / this.camera.aspect;
+                const distance = Math.max(fitHeightDistance, fitWidthDistance) * 1.5;
+
+                const direction = this.controls.target.clone().sub(this.camera.position).normalize().multiplyScalar(-distance);
+                this.camera.position.copy(this.controls.target).add(direction);
+
+                this.controls.update();
+            }
+        });
     }
 
     // ── Model Loading ──────────────────────────────────────────────────

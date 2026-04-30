@@ -91,16 +91,22 @@ export class AvevaJsonLoader {
             radius = Math.max(radius, 0.05);
 
             if (element.type === 'VALV') {
-                geometry = new THREE.SphereGeometry(radius * 1.5, 16, 16);
+                const l = Math.max(length, radius * 3);
+                geometry = new THREE.BoxGeometry(radius * 1.5, radius * 1.5, l);
                 material = new THREE.MeshStandardMaterial({ color: 0xcc2222 });
             } else if (element.type === 'FLAN') {
-                geometry = new THREE.CylinderGeometry(radius * 1.5, radius * 1.5, length || (radius*0.5), 16);
+                const flanThick = Math.min(length, radius * 0.4) || (radius * 0.4);
+                geometry = new THREE.CylinderGeometry(radius * 1.6, radius * 1.6, flanThick, 24);
                 material = new THREE.MeshStandardMaterial({ color: 0x888888 });
             } else if (element.type === 'ELBO' || element.type === 'BEND') {
-                geometry = new THREE.CylinderGeometry(radius, radius, length, 16);
+                if (length > radius * 2) {
+                    geometry = new THREE.CylinderGeometry(radius * 1.05, radius * 1.05, length, 16);
+                } else {
+                    geometry = new THREE.SphereGeometry(radius * 1.2, 16, 16);
+                }
                 material = new THREE.MeshStandardMaterial({ color: 0xaa55aa });
             } else if (element.type === 'TEE' || element.type === 'OLET') {
-                geometry = new THREE.CylinderGeometry(radius, radius, length, 16);
+                geometry = new THREE.CylinderGeometry(radius * 1.15, radius * 1.15, length, 16);
                 material = new THREE.MeshStandardMaterial({ color: 0x55aa55 });
             } else {
                 geometry = new THREE.CylinderGeometry(radius, radius, length, 16);
@@ -202,6 +208,41 @@ export class AvevaJsonLoader {
         if (element.children && Array.isArray(element.children)) {
             for (const child of element.children) {
                 traverse(child, group, currentPath);
+            }
+
+            // Draw pipes between components for RMSS JSON structure
+            if (element.type === 'BRANCH' && element.children.length > 1) {
+                let radius = 0.05;
+                if (element.attributes) {
+                    if (element.attributes.HBOR) radius = parseFloat(element.attributes.HBOR) / 2;
+                    else if (element.attributes.TBOR) radius = parseFloat(element.attributes.TBOR) / 2;
+                }
+                radius = Math.max(radius, 0.05);
+
+                for (let i = 0; i < element.children.length - 1; i++) {
+                    const c1 = element.children[i];
+                    const c2 = element.children[i+1];
+
+                    const p1 = (c1.attributes && c1.attributes.LPOS) ? c1.attributes.LPOS : (c1.attributes && c1.attributes.APOS);
+                    const p2 = (c2.attributes && c2.attributes.APOS) ? c2.attributes.APOS : null;
+
+                    if (p1 && p2) {
+                        const dx = p2.x - p1.x;
+                        const dy = p2.y - p1.y;
+                        const dz = p2.z - p1.z;
+                        const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                        if (dist > 0.01) {
+                            const pipeGeom = new THREE.CylinderGeometry(radius, radius, dist, 12);
+                            const pipeMat = new THREE.MeshStandardMaterial({ color: 0x3d74c5 });
+                            const pipeMesh = new THREE.Mesh(pipeGeom, pipeMat);
+                            pipeMesh.position.set(p1.x + dx/2, p1.y + dy/2, p1.z + dz/2);
+                            const axis = new THREE.Vector3(0, 1, 0);
+                            const targetVec = new THREE.Vector3(dx, dy, dz).normalize();
+                            pipeMesh.quaternion.setFromUnitVectors(axis, targetVec);
+                            group.add(pipeMesh);
+                        }
+                    }
+                }
             }
         }
     }

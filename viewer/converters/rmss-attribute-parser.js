@@ -106,7 +106,55 @@ function parseRmssAttributes(content) {
   }
 
   // Filter out branches that have no relevant children
-  return Array.from(branchMap.values()).filter(b => b.children.length > 0);
+  const finalBranches = Array.from(branchMap.values()).filter(b => b.children.length > 0);
+
+  // Sort components within branches to ensure sequential traversal for drawing pipes
+  for (const b of finalBranches) {
+    if (b.children.length < 2) continue;
+
+    const sorted = [];
+    const pool = new Set(b.children);
+
+    // Pick a starting point (e.g. the one with fewest other components near its APOS)
+    // For simplicity, we just pick the first component in the original list
+    let current = b.children[0];
+    sorted.push(current);
+    pool.delete(current);
+
+    const getDist = (p1, p2) => {
+        if (!p1 || !p2) return Infinity;
+        return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2) + Math.pow(p1.z - p2.z, 2));
+    };
+
+    while (pool.size > 0) {
+        let bestNext = null;
+        let minTargetDist = Infinity;
+
+        const currentLpos = current.attributes.LPOS || current.attributes.APOS;
+
+        for (const candidate of pool) {
+            const candidateApos = candidate.attributes.APOS;
+            if (!candidateApos) continue;
+            const dist = getDist(currentLpos, candidateApos);
+            if (dist < minTargetDist) {
+                minTargetDist = dist;
+                bestNext = candidate;
+            }
+        }
+
+        if (!bestNext) {
+            // Broken chain, just grab any remaining
+            bestNext = Array.from(pool)[0];
+        }
+
+        sorted.push(bestNext);
+        pool.delete(bestNext);
+        current = bestNext;
+    }
+    b.children = sorted;
+  }
+
+  return finalBranches;
 }
 
 // Ensure we export it properly for both ES modules and CommonJS
