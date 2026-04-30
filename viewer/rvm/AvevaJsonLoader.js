@@ -91,16 +91,22 @@ export class AvevaJsonLoader {
             radius = Math.max(radius, 0.05);
 
             if (element.type === 'VALV') {
-                geometry = new THREE.SphereGeometry(radius * 1.5, 16, 16);
+                const l = Math.max(length, radius * 3);
+                geometry = new THREE.BoxGeometry(radius * 1.5, radius * 1.5, l);
                 material = new THREE.MeshStandardMaterial({ color: 0xcc2222 });
             } else if (element.type === 'FLAN') {
-                geometry = new THREE.CylinderGeometry(radius * 1.5, radius * 1.5, length || (radius*0.5), 16);
+                const flanThick = Math.min(length, radius * 0.4) || (radius * 0.4);
+                geometry = new THREE.CylinderGeometry(radius * 1.6, radius * 1.6, flanThick, 24);
                 material = new THREE.MeshStandardMaterial({ color: 0x888888 });
             } else if (element.type === 'ELBO' || element.type === 'BEND') {
-                geometry = new THREE.CylinderGeometry(radius, radius, length, 16);
+                if (length > radius * 2) {
+                    geometry = new THREE.CylinderGeometry(radius * 1.05, radius * 1.05, length, 16);
+                } else {
+                    geometry = new THREE.SphereGeometry(radius * 1.2, 16, 16);
+                }
                 material = new THREE.MeshStandardMaterial({ color: 0xaa55aa });
             } else if (element.type === 'TEE' || element.type === 'OLET') {
-                geometry = new THREE.CylinderGeometry(radius, radius, length, 16);
+                geometry = new THREE.CylinderGeometry(radius * 1.15, radius * 1.15, length, 16);
                 material = new THREE.MeshStandardMaterial({ color: 0x55aa55 });
             } else {
                 geometry = new THREE.CylinderGeometry(radius, radius, length, 16);

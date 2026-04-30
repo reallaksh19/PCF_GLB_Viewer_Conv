@@ -118,6 +118,15 @@ function _bindBundleLoader(container) {
               kind: 'aveva-json'
           });
           notify({ type: 'info', message: `Converted RMSS Attributes to JSON hierarchy` });
+
+          // Offer download "Save As"
+          const blob = new Blob([JSON.stringify(hierarchyJson, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = file.name + '.json';
+          a.click();
+          URL.revokeObjectURL(url);
       } catch (err) {
           notify({ type: 'error', message: `Failed to parse Attributes file: ${err.message}` });
       }
@@ -236,11 +245,29 @@ function _buildHTML(caps) {
       <canvas class="rvm-canvas" id="rvm-canvas"></canvas>
     </div>
     <div class="geo-right-panel rvm-right-panel">
-      <div class="rvm-panel-header">Attributes</div>
+      <div class="rvm-panel-header" style="display:flex; justify-content: space-between; align-items: center;">
+        Attributes
+        <div style="display:flex; gap:4px;">
+          <input type="text" id="rvm-attr-filter-input" placeholder="Filter..." style="width: 100px; font-size: 10px; padding: 2px 4px; border: 1px solid #333; background: #222; color: #fff;">
+        </div>
+      </div>
       <div id="rvm-attributes-content" class="rvm-attributes-panel"></div>
-      <div class="rvm-panel-header">Review Tags</div>
+      <div class="rvm-panel-header" style="display:flex; justify-content: space-between; align-items: center;">
+        Review Tags
+        <div style="display:flex; gap:4px;">
+          <select id="rvm-tag-filter-select" style="font-size: 10px; padding: 2px; background: #222; color: #fff; border: 1px solid #333;">
+            <option value="all">All</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <button class="rvm-btn" id="rvm-import-tag-btn" style="padding: 2px 6px; font-size: 10px;" title="Import Tags XML">Imp</button>
+          <button class="rvm-btn" id="rvm-export-tag-btn" style="padding: 2px 6px; font-size: 10px;" title="Export Tags XML">Exp</button>
+        </div>
+      </div>
       <div id="rvm-tag-list" class="rvm-tag-list"></div>
       <button class="rvm-btn" id="rvm-add-tag-btn" disabled>+ Add Tag</button>
+      <input type="file" id="rvm-import-tag-input" accept=".xml" style="display:none">
     </div>
   </div>
 </div>`.trim();
@@ -272,8 +299,84 @@ function _bindToolbarActions(container) {
       case 'SECTION_BOX': _viewer?.setSectionMode?.('BOX'); break;
       case 'SECTION_PLANE_UP': _viewer?.setSectionMode?.('PLANE_UP'); break;
       case 'SECTION_DISABLE': _viewer?.disableSection?.(); break;
+      case 'VIEW_SNAPSHOT':
+        if (_viewer && _viewer.renderer) {
+            _viewer.renderer.render(_viewer.scene, _viewer.camera);
+            const dataUrl = _viewer.renderer.domElement.toDataURL('image/png');
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = `snapshot_${Date.now()}.png`;
+            a.click();
+            notify({ type: 'success', message: 'Snapshot saved' });
+        }
+        break;
     }
   });
+
+  // Tag export/import buttons
+  const btnExp = container.querySelector('#rvm-export-tag-btn');
+  const btnImp = container.querySelector('#rvm-import-tag-btn');
+  const inputImp = container.querySelector('#rvm-import-tag-input');
+
+  if (btnExp) {
+      btnExp.addEventListener('click', () => {
+          if (_viewer && _viewer.tagStore) {
+              const xml = _viewer.tagStore.exportToXml();
+              const blob = new Blob([xml], { type: 'application/xml' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'tags.xml';
+              a.click();
+              URL.revokeObjectURL(url);
+          }
+      });
+  }
+
+  if (btnImp && inputImp) {
+      btnImp.addEventListener('click', () => inputImp.click());
+      inputImp.addEventListener('change', async (e) => {
+          const file = e.target.files?.[0];
+          if (!file || !_viewer || !_viewer.tagStore) return;
+          try {
+              const text = await file.text();
+              _viewer.tagStore.importFromXml(text);
+              notify({ type: 'success', message: 'Tags imported successfully' });
+          } catch (err) {
+              notify({ type: 'error', message: `Failed to import tags: ${err.message}` });
+          }
+          e.target.value = '';
+      });
+  }
+
+  // Attribute Filter
+  const attrFilterInput = container.querySelector('#rvm-attr-filter-input');
+  if (attrFilterInput) {
+      attrFilterInput.addEventListener('input', (e) => {
+          const filterStr = e.target.value.toLowerCase();
+          const rows = container.querySelectorAll('#rvm-attributes-content tr');
+          rows.forEach(row => {
+              const text = row.textContent.toLowerCase();
+              row.style.display = text.includes(filterStr) ? '' : 'none';
+          });
+      });
+  }
+
+  // Tag Filter
+  const tagFilterSelect = container.querySelector('#rvm-tag-filter-select');
+  if (tagFilterSelect) {
+      tagFilterSelect.addEventListener('change', (e) => {
+          const filterVal = e.target.value;
+          const tags = container.querySelectorAll('#rvm-tag-list .rvm-tag-item');
+          tags.forEach(tag => {
+              if (filterVal === 'all') {
+                  tag.style.display = '';
+              } else {
+                  tag.style.display = tag.classList.contains(`severity-${filterVal}`) ? '' : 'none';
+              }
+          });
+      });
+  }
 }
 
 // ── ResizeObserver ──────────────────────────────────────────────────────────
