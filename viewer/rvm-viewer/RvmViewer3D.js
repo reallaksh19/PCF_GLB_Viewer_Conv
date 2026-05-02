@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { emit } from '../core/event-bus.js';
+import { RuntimeEvents } from '../contracts/runtime-events.js';
 
 import { RvmSectioning } from './RvmSectioning.js';
 import { RvmVisibilityController } from './RvmVisibilityController.js';
@@ -60,6 +62,12 @@ export class RvmViewer3D {
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.05;
         this.controls.screenSpacePanning = true;
+        this.controls.zoomSpeed = 1.2;
+        this.controls.panSpeed = 1.1;
+        this.controls.rotateSpeed = 1.0;
+        this.controls.minDistance = 0.05;
+        this.controls.maxDistance = 10000000;
+        this.renderer.domElement.style.touchAction = 'none';
 
         // Lighting
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -107,6 +115,15 @@ export class RvmViewer3D {
 
         // Save views config
         this._savedView = null;
+        this.mouse = new THREE.Vector2();
+        this.raycaster = new THREE.Raycaster();
+        this.measureModeEnabled = false;
+        this.marqueeModeEnabled = false;
+        this._marqueeStart = null;
+        this.marqueeElement = null;
+        this._measureStart = null;
+        this._measureObjects = null;
+        this._measurePointMesh = null;
     }
 
     // ── Model Loading ──────────────────────────────────────────────────
@@ -127,6 +144,25 @@ export class RvmViewer3D {
             this.modelGroup.rotation.set(0,0,0);
             this.modelGroup.updateMatrixWorld(true);
         }
+
+        // Force visible materials — brighten any mesh that is near-black
+        this.modelGroup.traverse(child => {
+            if (!child.isMesh) return;
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            mats.forEach(mat => {
+                if (mat.color) {
+                    const hsl = { h: 0, s: 0, l: 0 };
+                    mat.color.getHSL(hsl);
+                    // If luminance is very low, it's too dark to see against dark background
+                    if (hsl.l < 0.15) {
+                        mat.color.setHex(0x6eb5e0); // Steel blue
+                    }
+                }
+                if (mat.metalness !== undefined) mat.metalness = Math.min(mat.metalness, 0.3);
+                if (mat.roughness !== undefined) mat.roughness = Math.max(mat.roughness, 0.45);
+                mat.needsUpdate = true;
+            });
+        });
 
         // Initialize modules
         this.sectioning.updateModelGroup(this.modelGroup);
@@ -206,7 +242,11 @@ export class RvmViewer3D {
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
 
-        const maxSize = Math.max(size.x, size.y, size.z);
+        const modelBox = new THREE.Box3().setFromObject(this.modelGroup);
+        const modelSize = modelBox.getSize(new THREE.Vector3());
+        const modelDiagonal = Math.max(modelSize.length(), 1);
+        const minFitSize = Math.max(1, modelDiagonal * 0.02);
+        const maxSize = Math.max(size.x, size.y, size.z, minFitSize);
         let fitHeightDistance;
         if (this._isOrthographic) {
             fitHeightDistance = maxSize * 1.2;
@@ -229,8 +269,8 @@ export class RvmViewer3D {
             this.orthoCamera.top = distance / 2;
             this.orthoCamera.bottom = -distance / 2;
         }
-        this.camera.near = distance / 100;
-        this.camera.far = distance * 100;
+        this.camera.near = Math.max(0.01, distance / 1000);
+        this.camera.far = Math.max(1000, distance * 150, modelDiagonal * 8);
         this.camera.updateProjectionMatrix();
         this.controls.update();
     }
@@ -261,32 +301,60 @@ export class RvmViewer3D {
         this.sectioning.disableSection();
     }
 
+    setSectionClipBounds(bounds) {
+        if (this.sectioning) this.sectioning.setClipBounds(bounds);
+    }
+
+    getModelBounds() {
+        if (this.modelGroup.children.length === 0) return null;
+        return new THREE.Box3().setFromObject(this.modelGroup);
+    }
+
+    resetSectionToModel() {
+        if (this.sectioning && this.sectioning._sectionMode === 'BOX') {
+            this.sectioning.buildBoxSection(this.modelGroup);
+        }
+    }
+
 
     setNavMode(mode) {
-        this._navMode = mode;
+        const normalized = String(mode || 'orbit').toLowerCase();
+        this._navMode = normalized;
 
         // Reset modes
         this.controls.enabled = false;
+        this.controls.enableRotate = true;
+        this.controls.enablePan = true;
+        this.controls.enableZoom = true;
         this.measureModeEnabled = false;
         this.marqueeModeEnabled = false;
         this.container.style.cursor = 'default';
         this.clearMeasurement();
 
-        if (mode === 'orbit') {
+        if (normalized === 'orbit') {
             this.controls.enabled = true;
             this.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
-        } else if (mode === 'pan') {
+        } else if (normalized === 'pan') {
             this.controls.enabled = true;
             this.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
-        } else if (mode === 'select') {
+        } else if (normalized === 'select') {
             this.controls.enabled = true;
             this.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
-        } else if (mode === 'Measure') {
+        } else if (normalized === 'measure' || normalized === 'measure_tool') {
+            this.controls.enabled = false;
             this.measureModeEnabled = true;
             this.container.style.cursor = 'crosshair';
-        } else if (mode === 'Zoom') {
+        } else if (normalized === 'zoom' || normalized === 'view_marquee_zoom') {
+            this.controls.enabled = false;
             this.marqueeModeEnabled = true;
             this.container.style.cursor = 'zoom-in';
+        } else {
+            this.controls.enabled = true;
+            this.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+            this._navMode = 'orbit';
+        }
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+            window.dispatchEvent(new CustomEvent('app:tool-changed', { detail: { mode: this._navMode } }));
         }
     }
 
@@ -443,9 +511,6 @@ export class RvmViewer3D {
 
             // Switch back to orbit
             this.setNavMode('orbit');
-            if (window.dispatchEvent) {
-                window.dispatchEvent(new CustomEvent('app:tool-changed', { detail: { mode: 'orbit' } }));
-            }
         }
     }
 
@@ -494,7 +559,7 @@ export class RvmViewer3D {
 
         this.controls.object = this.camera;
         this.controls.update();
-        this.selection._camera = this.camera; // update selection camera
+        this.selection.camera = this.camera;
     }
 
     snapToPreset(preset) {
@@ -529,6 +594,14 @@ export class RvmViewer3D {
         this.selection.clearSelection();
     }
 
+    getNavMode() {
+        return this._navMode;
+    }
+
+    onResize() {
+        this._onResize();
+    }
+
     // ── Recommended Additions ──────────────────────────────────────────
 
     isolateSelection() {
@@ -543,6 +616,7 @@ export class RvmViewer3D {
 
     selectByCanonicalId(id) {
         this.selection.selectByCanonicalId(id);
+        emit(RuntimeEvents.RVM_NODE_SELECTED, { canonicalId: id || null });
     }
 
     getSelection() {
@@ -550,6 +624,23 @@ export class RvmViewer3D {
             canonicalObjectId: this.selection.getSelectedCanonicalId(),
             renderObjectIds: this.selection.getSelectionRenderIds()
         };
+    }
+
+    getSelectionAnchor() {
+        const selectionIds = this.selection.getSelectionRenderIds();
+        if (!selectionIds || selectionIds.length === 0) return null;
+        const targetSet = new Set(selectionIds);
+        const box = new THREE.Box3();
+        let found = false;
+        this.modelGroup.traverse((obj) => {
+            if (!obj.isMesh) return;
+            const renderId = obj.userData?.name || obj.name || obj.uuid;
+            if (!targetSet.has(renderId)) return;
+            box.expandByObject(obj);
+            found = true;
+        });
+        if (!found || box.isEmpty()) return null;
+        return box.getCenter(new THREE.Vector3());
     }
 
     setSavedView(view) {
@@ -612,10 +703,13 @@ export class RvmViewer3D {
 
     addTag(tag) {
         if (!tag || !tag.worldPosition) return;
+        this.removeTag(tag.id);
         const div = document.createElement('div');
         div.className = 'rvm-tag-label';
         div.textContent = tag.text || tag.id;
         div.dataset.tagId = tag.id;
+        const sev = String(tag.severity || 'info').toLowerCase();
+        div.classList.add(`severity-${sev}`);
 
         // Use global CSS2DObject constructor if available, else omit (e.g. headless tests)
         if (typeof CSS2DObject !== 'undefined') {
@@ -639,10 +733,15 @@ export class RvmViewer3D {
     }
 
     removeTag(tagId) {
-        const obj = this.scene.getObjectByName(`TAG_${tagId}`);
-        if (obj) {
-            this.scene.remove(obj); if(obj.geometry) obj.geometry.dispose(); if(obj.material) obj.material.dispose();
-        }
+        const targets = [];
+        this.scene.traverse((obj) => {
+            if (obj.name === `TAG_${tagId}`) targets.push(obj);
+        });
+        targets.forEach((obj) => {
+            this.scene.remove(obj);
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) obj.material.dispose();
+        });
     }
 
     jumpToTag(tagId) {
@@ -650,6 +749,10 @@ export class RvmViewer3D {
         const tag = this.tagStore.getTag(tagId);
         if (tag && tag.cameraState) {
             this.setCameraState(tag.cameraState);
+        }
+        if (tag && tag.canonicalObjectId) {
+            this.selectByCanonicalId(tag.canonicalObjectId);
+            this.fitSelection();
         }
     }
 

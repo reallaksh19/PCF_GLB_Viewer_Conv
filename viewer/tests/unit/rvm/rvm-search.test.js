@@ -118,11 +118,10 @@ async function runTests() {
 
     // 3. Tree Tests
     let selectCalledWith = null;
-    let fitCalled = false;
     const mockViewerCtx = {
         viewer: {
             selectByCanonicalId: (id) => selectCalledWith = id,
-            fitSelection: () => fitCalled = true
+            fitSelection: () => {}
         }
     };
 
@@ -140,7 +139,7 @@ async function runTests() {
     // Simulate the e.stopPropagation() mock event
     labelDiv.onclick({ stopPropagation: () => {} });
 
-    if (selectCalledWith === 'OBJ:1' && fitCalled) {
+    if (selectCalledWith === 'OBJ:1') {
          console.log('✅ click in tree → selectByCanonicalId called with correct id');
     } else {
          errors.push('Click in tree did not call selectByCanonicalId correctly');

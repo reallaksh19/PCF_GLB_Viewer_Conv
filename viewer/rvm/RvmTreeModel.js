@@ -89,7 +89,10 @@ export class RvmTreeModel {
 
         const textSpan = document.createElement('span');
         textSpan.className = 'rvm-tree-text';
-        textSpan.textContent = treeNode.name;
+        const kind = String(treeNode.kind || '').trim();
+        textSpan.textContent = kind && kind !== 'UNKNOWN'
+          ? `[${kind}] ${treeNode.name}`
+          : treeNode.name;
         labelDiv.appendChild(textSpan);
 
         // Click on the node text selects it in the viewer
@@ -97,7 +100,6 @@ export class RvmTreeModel {
             e.stopPropagation();
             if (this.viewerContext && this.viewerContext.viewer) {
                 this.viewerContext.viewer.selectByCanonicalId(treeNode.canonicalObjectId);
-                this.viewerContext.viewer.fitSelection();
             }
         };
 
