@@ -1,0 +1,143 @@
+﻿{
+    "timestamp":  "2026-04-29T18:13:49.8656039Z",
+    "mode":  "dry-run",
+    "targetRoot":  "C:\\Code3\\PCF_GLB_Viewer_Conv",
+    "modules":  [
+                    {
+                        "moduleId":  "topo-support-model-exchange",
+                        "patch":  "patches/01_topo_support_model_exchange.patch",
+                        "patchStatus":  "would-apply",
+                        "overlays":  [
+                                         {
+                                             "path":  "viewer/core/app.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "opt/tab-visibility.json",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/opt/tab-visibility.json",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/source/adapter-registry.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/source/xml/CaesarXmlImportAdapter.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/tabs/model-exchange-tab.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/tabs/model-exchange-tab.css",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/source/rev/rev-text-parser.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/source/rev/RevImportAdapter.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/source/json/json-topo-parser.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/source/json/GenericJsonImportAdapter.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/topo/template-evaluator.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/topo/topo-mapping-profiles.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/topo/topo-builder.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/support/support-mapping-config.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/support/support-mapping-store.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/support/support-builder.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/view/Modelexh_PreviewRenderer.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/tabs/support-mapping-config-tab.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/tabs/support-mapping-config-tab.css",
+                                             "status":  "would-copy"
+                                         }
+                                     ]
+                    },
+                    {
+                        "moduleId":  "rvm-attribute-xml-compat",
+                        "patch":  "patches/02_rvm_attribute_xml_compat.patch",
+                        "patchStatus":  "would-apply",
+                        "overlays":  [
+                                         {
+                                             "path":  "viewer/converters/scripts/rvm_attribute_to_xml.py",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/converters/scripts/rvm_attribute_to_xml_to_cii.py",
+                                             "status":  "would-copy"
+                                         }
+                                     ]
+                    },
+                    {
+                        "moduleId":  "tests",
+                        "patch":  "patches/03_tests.patch",
+                        "patchStatus":  "would-apply",
+                        "overlays":  [
+                                         {
+                                             "path":  "viewer/tests/unit/interchange/adapter-registry.test.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/tests/unit/interchange/support-mapping-config.test.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/tests/integration/model-exchange-ui.test.js",
+                                             "status":  "would-copy"
+                                         },
+                                         {
+                                             "path":  "viewer/tests/run-interface-tests.mjs",
+                                             "status":  "would-copy"
+                                         }
+                                     ]
+                    },
+                    {
+                        "moduleId":  "overlay-only",
+                        "patch":  "",
+                        "patchStatus":  "n/a",
+                        "overlays":  [
+                                         {
+                                             "path":  "viewer/contracts/runtime-events.js",
+                                             "status":  "would-copy"
+                                         }
+                                     ]
+                    }
+                ]
+}

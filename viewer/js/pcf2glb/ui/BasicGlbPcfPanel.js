@@ -13,14 +13,14 @@ function setBusy(button, label, isBusy) {
   button.textContent = isBusy ? 'Loading...' : label;
 }
 
-export function renderAdvancedGlbViewerPanel(container) {
+export function renderBasicGlbPcfPanel(container) {
   container.innerHTML = `
     <div style="display:flex; height:calc(100vh - 46px); background:linear-gradient(135deg, #cfd8e3 0%, #e8edf4 24%, #0f1723 24%, #0f1723 100%);">
       <aside style="width:320px; padding:22px 20px; background:linear-gradient(180deg, #eef3f8 0%, #dfe7f0 100%); border-right:1px solid rgba(15,23,35,0.12); display:flex; flex-direction:column; gap:18px; box-shadow:inset -1px 0 0 rgba(255,255,255,0.45);">
         <div>
-          <div style="font-size:11px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:#35506f; margin-bottom:8px;">Advanced Workspace</div>
-          <h3 style="font-size:2rem; line-height:1.05; color:#102033; margin:0 0 8px;">Advanced GLB Viewer</h3>
-          <p style="font-size:13px; line-height:1.45; color:#4e627b; margin:0;">Stronger contrast and direct mock loading for the advanced vanilla JS viewer.</p>
+          <div style="font-size:11px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:#35506f; margin-bottom:8px;">Basic Workspace</div>
+          <h3 style="font-size:2rem; line-height:1.05; color:#102033; margin:0 0 8px;">Basic GLB/PCF Viewer</h3>
+          <p style="font-size:13px; line-height:1.45; color:#4e627b; margin:0;">Load GLB, GLTF or PCF files for lightweight 3D inspection.</p>
         </div>
 
         <section style="padding:16px; border-radius:16px; background:#ffffff; border:1px solid rgba(16,32,51,0.08); box-shadow:0 10px 30px rgba(16,32,51,0.08);">
@@ -45,7 +45,7 @@ export function renderAdvancedGlbViewerPanel(container) {
             <div><strong style="color:#102033;">Pan:</strong> right mouse button or trackpad secondary drag</div>
             <div><strong style="color:#102033;">Zoom:</strong> wheel or pinch</div>
             <div><strong style="color:#102033;">Views:</strong> use the top toolbar for ISO, Top, Front, Side, Fit, and Clip</div>
-            <div><strong style="color:#102033;">Marquee:</strong> hold <span class="mono">Shift</span> and drag for focus zoom</div>
+            <div><strong style="color:#102033;">Marquee Zoom:</strong> click the <span style="background:#1866c7;color:#fff;padding:1px 5px;border-radius:3px;font-size:10px;">â¬š MZoom</span> button then drag a box on the viewport</div>
           </div>
         </section>
       </aside>
@@ -54,18 +54,20 @@ export function renderAdvancedGlbViewerPanel(container) {
         <div style="background:linear-gradient(90deg, #16263b 0%, #1f3551 54%, #29466d 100%); color:#f6fbff; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; gap:16px; border-bottom:1px solid rgba(255,255,255,0.08); box-shadow:0 10px 30px rgba(5,10,18,0.18);">
           <div>
             <div style="font-size:11px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:#9db7d8; margin-bottom:2px;">Scene</div>
-            <span style="font-size:28px; font-weight:700; letter-spacing:0.02em;">Advanced 3D Viewer</span>
+            <span style="font-size:28px; font-weight:700; letter-spacing:0.02em;">Basic GLB/PCF Viewer</span>
           </div>
           <div id="adv-toolbar"></div>
         </div>
 
-        <div id="adv-preview-container" style="flex:1; background:radial-gradient(circle at top, #2a2a30 0%, #1d1d21 38%, #15171b 100%); position:relative; overflow:hidden;"></div>
+        <div id="adv-preview-container" style="flex:1; background:radial-gradient(circle at center, #3a3a45 0%, #2a2a32 40%, #1c1c22 100%); position:relative; overflow:hidden;"></div>
         <div id="adv-nav-strip" style="position:absolute; right:18px; top:112px; z-index:12; display:flex; flex-direction:column; gap:10px;">
-          <button data-adv-nav="ISO" title="ISO View" style="${_navButtonStyle()}">ISO</button>
-          <button data-adv-nav="TOP" title="Top View" style="${_navButtonStyle()}">TOP</button>
-          <button data-adv-nav="FRONT" title="Front View" style="${_navButtonStyle()}">FRT</button>
-          <button data-adv-nav="SIDE" title="Side View" style="${_navButtonStyle()}">SIDE</button>
-          <button data-adv-nav="FIT" title="Fit All" style="${_navButtonStyle()}">FIT</button>
+          <button data-adv-nav="ISO"     title="ISO View"         style="${_navButtonStyle()}">ISO</button>
+          <button data-adv-nav="TOP"     title="Top View"         style="${_navButtonStyle()}">TOP</button>
+          <button data-adv-nav="FRONT"   title="Front View"       style="${_navButtonStyle()}">FRT</button>
+          <button data-adv-nav="SIDE"    title="Side View"        style="${_navButtonStyle()}">SIDE</button>
+          <button data-adv-nav="FIT"     title="Fit All"          style="${_navButtonStyle()}">FIT</button>
+          <button data-adv-nav="MARQUEE" title="Marquee Zoom: drag a rectangle on the viewport to zoom into it" id="btn-marquee-nav" style="${_navButtonStyle()}">â¬š MZoom</button>
+          <button data-adv-nav="CLIP"    title="Toggle Section Clip Box + open adjustment panel" style="${_navButtonStyle()}">CLIP</button>
           <button data-adv-nav="MEASURE" title="Measure Selection" style="${_navButtonStyle()}">MSR</button>
         </div>
         <div id="adv-measure-chip" style="position:absolute; right:18px; bottom:80px; z-index:11; min-width:220px; max-width:280px; padding:12px 14px; border-radius:14px; border:1px solid rgba(131,191,255,0.18); background:rgba(16,30,47,0.88); color:#e8f3ff; font-size:12px; line-height:1.45; box-shadow:0 12px 28px rgba(0,0,0,0.28);">Measure tool is off.</div>
@@ -82,12 +84,29 @@ export function renderAdvancedGlbViewerPanel(container) {
           </div>
         </div>
 
-        <div id="adv-property-panel" style="position:absolute; top:76px; right:20px; width:300px; background:rgba(19,34,53,0.94); color:white; padding:15px; border-radius:14px; box-shadow:0 14px 40px rgba(0,0,0,0.35); display:none; z-index:10; border:1px solid rgba(255,255,255,0.08);">
+        <div id="adv-property-panel" style="position:absolute; top:76px; right:90px; width:300px; background:rgba(19,34,53,0.94); color:white; padding:15px; border-radius:14px; box-shadow:0 14px 40px rgba(0,0,0,0.35); display:none; z-index:10; border:1px solid rgba(255,255,255,0.08);">
           <div style="display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.14); padding-bottom:8px; margin-bottom:10px;">
             <strong style="font-size:14px;">Component Properties</strong>
             <button id="btn-adv-close-props" style="background:none; border:none; color:white; cursor:pointer; font-weight:bold;">X</button>
           </div>
           <div id="adv-property-content" style="max-height:400px; overflow-y:auto; font-size:12px; font-family:monospace;"></div>
+        </div>
+
+        <!-- Section Box Adjustment Panel -->
+        <div id="adv-section-panel" style="position:absolute; top:112px; left:16px; width:260px; background:rgba(12,22,38,0.96); color:#e8f3ff; padding:14px 16px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.4); display:none; z-index:15; border:1px solid rgba(74,158,255,0.25);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <strong style="font-size:13px; color:#7ab3ff;">âœ‚ Section Box</strong>
+            <button id="btn-adv-section-close" style="background:none;border:none;color:#888;cursor:pointer;font-size:16px;">âœ•</button>
+          </div>
+          <div style="display:grid; gap:10px; font-size:11px;">
+            <div><label style="color:#9db7d8; display:flex; justify-content:space-between;">Min X <span id="lbl-sx-min">0</span></label><input type="range" id="sx-min" min="0" max="100" value="0" style="width:100%; accent-color:#4a9eff;"></div>
+            <div><label style="color:#9db7d8; display:flex; justify-content:space-between;">Max X <span id="lbl-sx-max">100</span></label><input type="range" id="sx-max" min="0" max="100" value="100" style="width:100%; accent-color:#4a9eff;"></div>
+            <div><label style="color:#9db7d8; display:flex; justify-content:space-between;">Min Y <span id="lbl-sy-min">0</span></label><input type="range" id="sy-min" min="0" max="100" value="0" style="width:100%; accent-color:#4a9eff;"></div>
+            <div><label style="color:#9db7d8; display:flex; justify-content:space-between;">Max Y <span id="lbl-sy-max">100</span></label><input type="range" id="sy-max" min="0" max="100" value="100" style="width:100%; accent-color:#4a9eff;"></div>
+            <div><label style="color:#9db7d8; display:flex; justify-content:space-between;">Min Z <span id="lbl-sz-min">0</span></label><input type="range" id="sz-min" min="0" max="100" value="0" style="width:100%; accent-color:#4a9eff;"></div>
+            <div><label style="color:#9db7d8; display:flex; justify-content:space-between;">Max Z <span id="lbl-sz-max">100</span></label><input type="range" id="sz-max" min="0" max="100" value="100" style="width:100%; accent-color:#4a9eff;"></div>
+          </div>
+          <button id="btn-adv-section-fit" style="margin-top:12px; width:100%; padding:6px; background:#1a3a5c; border:1px solid #4a9eff; border-radius:6px; color:#7ab3ff; cursor:pointer; font-size:11px;">Reset to Model Bounds</button>
         </div>
       </section>
     </div>
@@ -190,16 +209,73 @@ export function renderAdvancedGlbViewerPanel(container) {
     propPanel.style.display = 'none';
   });
 
+  // Section box panel wiring
+  const sectionPanel  = container.querySelector('#adv-section-panel');
+  const btnSecClose   = container.querySelector('#btn-adv-section-close');
+  const btnSecFit     = container.querySelector('#btn-adv-section-fit');
+  let _modelBox = null;
+
+  btnSecClose?.addEventListener('click', () => { if (sectionPanel) sectionPanel.style.display = 'none'; });
+  btnSecFit?.addEventListener('click', () => {
+    ['sx-min','sy-min','sz-min'].forEach(id => { const el = container.querySelector(`#${id}`); if(el){el.value=0; const lbl=container.querySelector(`#lbl-${id}`); if(lbl)lbl.textContent='0%';} });
+    ['sx-max','sy-max','sz-max'].forEach(id => { const el = container.querySelector(`#${id}`); if(el){el.value=100; const lbl=container.querySelector(`#lbl-${id}`); if(lbl)lbl.textContent='100%';} });
+    viewerApp.resetSectionToModel?.();
+  });
+
+  function applySliders() {
+    if (!_modelBox || !viewerApp.setSectionClipBounds) return;
+    const pct = id => Number(container.querySelector(`#${id}`)?.value ?? 0) / 100;
+    const { min, max } = _modelBox;
+    const rx = max.x - min.x, ry = max.y - min.y, rz = max.z - min.z;
+    viewerApp.setSectionClipBounds({
+      minX: min.x + rx * pct('sx-min'), maxX: min.x + rx * pct('sx-max'),
+      minY: min.y + ry * pct('sy-min'), maxY: min.y + ry * pct('sy-max'),
+      minZ: min.z + rz * pct('sz-min'), maxZ: min.z + rz * pct('sz-max'),
+    });
+  }
+
+  ['sx-min','sx-max','sy-min','sy-max','sz-min','sz-max'].forEach(id => {
+    container.querySelector(`#${id}`)?.addEventListener('input', e => {
+      const lbl = container.querySelector(`#lbl-${id}`);
+      if (lbl) lbl.textContent = e.target.value + '%';
+      applySliders();
+    });
+  });
+
+  let marqueeActive = false;
+  let clipActive    = false;
+
   container.querySelectorAll('[data-adv-nav]').forEach((button) => {
     button.addEventListener('click', () => {
       const action = button.getAttribute('data-adv-nav');
-      if (action === 'FIT') {
-        viewerApp.fitAll();
-        return;
-      }
+      if (action === 'FIT') { viewerApp.fitAll(); return; }
       if (action === 'MEASURE') {
         measureEnabled = !measureEnabled;
         viewerApp.setMeasureEnabled(measureEnabled);
+        button.style.background  = measureEnabled ? 'rgba(44,116,86,0.52)'   : 'rgba(19,36,57,0.42)';
+        button.style.borderColor = measureEnabled ? 'rgba(122,231,183,0.42)' : 'rgba(175,214,255,0.18)';
+        return;
+      }
+      if (action === 'MARQUEE') {
+        marqueeActive = !marqueeActive;
+        viewerApp.setMarqueeZoom(marqueeActive);
+        button.style.background  = marqueeActive ? 'rgba(24,102,199,0.65)'  : 'rgba(19,36,57,0.42)';
+        button.style.borderColor = marqueeActive ? 'rgba(100,180,255,0.55)' : 'rgba(175,214,255,0.18)';
+        button.style.color       = marqueeActive ? '#ffffff' : '#e4f0ff';
+        return;
+      }
+      if (action === 'CLIP') {
+        clipActive = !clipActive;
+        viewerApp.toggleSection();
+        button.style.background  = clipActive ? 'rgba(180,60,60,0.55)'  : 'rgba(19,36,57,0.42)';
+        button.style.borderColor = clipActive ? 'rgba(255,140,140,0.5)' : 'rgba(175,214,255,0.18)';
+        button.textContent = clipActive ? '\u2702 CLIP' : 'CLIP';
+        if (clipActive) {
+          _modelBox = viewerApp.getModelBounds?.() || null;
+          if (sectionPanel) sectionPanel.style.display = 'block';
+        } else {
+          if (sectionPanel) sectionPanel.style.display = 'none';
+        }
         return;
       }
       viewerApp.setPresetView(action);
@@ -230,7 +306,7 @@ async function _loadSelectedFile(file, viewerApp) {
         viewerApp.loadMessageSquareNodes(messageSquareNodes);
       }
     } catch (err) {
-      console.error('Advanced GLB Viewer: PCF annotation parse error', err);
+      console.error('Basic GLB/PCF Viewer: PCF annotation parse error', err);
       const url = await loadPcfTextToGlbUrl(text);
       await viewerApp.loadGLB(url);
     }

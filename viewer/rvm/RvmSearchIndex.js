@@ -51,7 +51,9 @@ export class RvmSearchIndex {
 
                     this._searchableEntries.push({
                         canonicalObjectId: node.canonicalObjectId,
+                        name: node.name || node.canonicalObjectId,
                         renderObjectIds: renderObjectIds,
+                        kind: node.kind || '',
                         attrs: node.attributes,
                         _text: searchableText
                     });
@@ -76,18 +78,29 @@ export class RvmSearchIndex {
         const normalizedQuery = query.toLowerCase().trim();
         if (normalizedQuery === '') return [];
 
-        const results = [];
+        const ranked = [];
         for (let i = 0; i < this._searchableEntries.length; i++) {
             const entry = this._searchableEntries[i];
-            if (entry._text.includes(normalizedQuery)) {
-                results.push({
-                    canonicalObjectId: entry.canonicalObjectId,
-                    renderObjectIds: entry.renderObjectIds,
-                    attrs: entry.attrs
-                });
-            }
+            const text = entry._text;
+            const name = String(entry.name || '').toLowerCase();
+            const canonical = String(entry.canonicalObjectId || '').toLowerCase();
+            let score = 0;
+            if (name === normalizedQuery || canonical === normalizedQuery) score += 100;
+            if (name.startsWith(normalizedQuery)) score += 60;
+            if (canonical.startsWith(normalizedQuery)) score += 40;
+            if (text.includes(normalizedQuery)) score += 20;
+            if (score <= 0) continue;
+            ranked.push({
+                canonicalObjectId: entry.canonicalObjectId,
+                name: entry.name,
+                kind: entry.kind,
+                renderObjectIds: entry.renderObjectIds,
+                attrs: entry.attrs,
+                score,
+            });
         }
-        return results;
+        ranked.sort((a, b) => b.score - a.score || String(a.name).localeCompare(String(b.name)));
+        return ranked.slice(0, 200);
     }
 
     dispose() {

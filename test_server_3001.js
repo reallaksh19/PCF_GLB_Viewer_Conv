@@ -153,6 +153,13 @@ async function handleNativeRvmToRev(req, res) {
         writeJson(res, 400, { ok: false, error: 'inputBase64 is required.' });
         return;
     }
+    if (!String(inputName).toLowerCase().endsWith('.rvm') && !String(inputName).toLowerCase().endsWith('.rev')) {
+        writeJson(res, 400, {
+            ok: false,
+            error: `Unsupported input "${inputName}". Native bridge accepts .rvm or .rev for this endpoint.`,
+        });
+        return;
+    }
 
     const attributesName = sanitizeFileName(body?.attributesName, 'attributes.att');
     const attributesBase64 = String(body?.attributesBase64 || '');
@@ -172,11 +179,14 @@ async function handleNativeRvmToRev(req, res) {
 
         let args = [];
         let execution;
-        let isGltfMode = body?.mode === 'rvm_to_glb';
+        const requestedMode = String(body?.mode || 'rvm_to_rev').trim();
+        const isGltfMode = requestedMode === 'rvm_to_glb';
+        const isJsonMode = requestedMode === 'rvm_to_json';
 
         const outputRevName = `${stem}_rvm_to_rev.rev`;
         const outputRevPath = path.join(tempRoot, outputRevName);
 
+        const outputJsonName = `${stem}_rvm_to_json.json`;
         const outputGlbName = `${stem}.glb`;
         const outputGlbPath = path.join(tempRoot, outputGlbName);
         const outputJsonPath = path.join(tempRoot, `${stem}.json`);
@@ -228,10 +238,40 @@ async function handleNativeRvmToRev(req, res) {
                      console.error("Index processing error", e);
                 }
             }
+        } else if (isJsonMode) {
+            args = [`--output-json=${outputJsonPath}`, inputPath];
+            if (attributesPath) args.push(attributesPath);
+            execution = await runProcess(parserExe, args, tempRoot);
         } else {
             args = [`--output-rev=${outputRevPath}`, inputPath];
             if (attributesPath) args.push(attributesPath);
             execution = await runProcess(parserExe, args, tempRoot);
+        }
+
+        const parseFailureRegex = /More END-tags and than NEW-tags|Failed to parse/i;
+        if (
+            execution.code !== 0 &&
+            attributesPath &&
+            parseFailureRegex.test(String(execution.stderr || ''))
+        ) {
+            const retryArgs = isGltfMode
+                ? [
+                    `--output-gltf=${outputGlbPath}`,
+                    `--output-json=${outputJsonPath}`,
+                    '--output-gltf-attributes=true',
+                    '--output-gltf-center=true',
+                    '--output-gltf-rotate-z-to-y=true',
+                    inputPath,
+                ]
+                : isJsonMode
+                    ? [`--output-json=${outputJsonPath}`, inputPath]
+                    : [`--output-rev=${outputRevPath}`, inputPath];
+            const retryExecution = await runProcess(parserExe, retryArgs, tempRoot);
+            if (retryExecution.code === 0) {
+                retryExecution.stderr = `Recovered from sidecar parse failure by retrying without sidecar.\n${retryExecution.stderr || ''}`;
+                execution = retryExecution;
+                args = retryArgs;
+            }
         }
 
         const stdoutLines = splitLines(execution.stdout);
@@ -275,6 +315,23 @@ async function handleNativeRvmToRev(req, res) {
                  logs: { stdout: stdoutLines, stderr: stderrLines, argv: args, binary: parserExe }
              });
 
+        } else if (isJsonMode) {
+            if (!fileExists(outputJsonPath)) {
+                writeJson(res, 500, {
+                    ok: false,
+                    error: 'Native converter did not produce output JSON file.',
+                    logs: { stdout: stdoutLines, stderr: stderrLines, argv: args, binary: parserExe },
+                });
+                return;
+            }
+
+            const outputText = fs.readFileSync(outputJsonPath, 'utf8');
+            writeJson(res, 200, {
+                ok: true,
+                outputName: outputJsonName,
+                outputText,
+                logs: { stdout: stdoutLines, stderr: stderrLines, argv: args, binary: parserExe },
+            });
         } else {
             if (!fileExists(outputRevPath)) {
                 writeJson(res, 500, {

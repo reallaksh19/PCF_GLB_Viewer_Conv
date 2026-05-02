@@ -76,6 +76,7 @@ function detectRvmParserBinary() {
         path.join(__dirname, '..', 'rvmparser', 'rvmparser-windows-bin.exe'),
         path.join(__dirname, 'rvmparser-windows-bin.exe'),
         'C:\\Code3\\rvmparser\\rvmparser-windows-bin.exe',
+        path.join(__dirname, 'viewer', 'converters', 'bin', 'rvmparser-windows-bin.exe'),
     ];
     for (const candidate of candidates) {
         if (fileExists(candidate)) return candidate;
@@ -152,6 +153,13 @@ async function handleNativeRvmToRev(req, res) {
         writeJson(res, 400, { ok: false, error: 'inputBase64 is required.' });
         return;
     }
+    if (!String(inputName).toLowerCase().endsWith('.rvm')) {
+        writeJson(res, 400, {
+            ok: false,
+            error: `Unsupported input "${inputName}". Native bridge accepts only .rvm for this endpoint.`,
+        });
+        return;
+    }
 
     const attributesName = sanitizeFileName(body?.attributesName, 'attributes.att');
     const attributesBase64 = String(body?.attributesBase64 || '');
@@ -168,13 +176,104 @@ async function handleNativeRvmToRev(req, res) {
         }
 
         const stem = path.parse(inputName).name || 'output';
-        const outputName = `${stem}_rvm_to_rev.rev`;
-        const outputPath = path.join(tempRoot, outputName);
 
-        const args = [`--output-rev=${outputPath}`, inputPath];
-        if (attributesPath) args.push(attributesPath);
+        let args = [];
+        let execution;
+        const requestedMode = String(body?.mode || 'rvm_to_rev').trim();
+        const isGltfMode = requestedMode === 'rvm_to_glb';
+        const isJsonMode = requestedMode === 'rvm_to_json';
 
-        const execution = await runProcess(parserExe, args, tempRoot);
+        const outputRevName = `${stem}_rvm_to_rev.rev`;
+        const outputRevPath = path.join(tempRoot, outputRevName);
+
+        const outputJsonName = `${stem}_rvm_to_json.json`;
+        const outputGlbName = `${stem}.glb`;
+        const outputGlbPath = path.join(tempRoot, outputGlbName);
+        const outputJsonPath = path.join(tempRoot, `${stem}.json`);
+
+        if (isGltfMode) {
+            args = [
+                `--output-gltf=${outputGlbPath}`,
+                `--output-json=${outputJsonPath}`,
+                '--output-gltf-attributes=true',
+                '--output-gltf-center=true',
+                '--output-gltf-rotate-z-to-y=true',
+                inputPath
+            ];
+            if (attributesPath) args.push(attributesPath);
+            execution = await runProcess(parserExe, args, tempRoot);
+
+            // Post-process JSON to generate RvmIndex format if successful
+            if (execution.code === 0 && fileExists(outputJsonPath)) {
+                try {
+                     const rawJson = JSON.parse(fs.readFileSync(outputJsonPath, 'utf8'));
+                     // Very naive gen-rvm-index emulation inline for the API
+                     const rvmIndex = {
+                         schemaVersion: 'rvm-index/v1',
+                         bundleId: `converted-${Date.now()}`,
+                         units: 'mm',
+                         upAxis: 'Y',
+                         nodes: []
+                     };
+
+                     // Convert raw parser output nodes to RvmIndex nodes
+                     if (Array.isArray(rawJson)) {
+                         rawJson.forEach((n, i) => {
+                             rvmIndex.nodes.push({
+                                 sourceObjectId: n.name || `OBJ:${i}`,
+                                 canonicalObjectId: n.name || `OBJ:${i}`,
+                                 renderObjectIds: [n.name || `OBJ:${i}`],
+                                 parentCanonicalObjectId: null,
+                                 name: n.name || `Node ${i}`,
+                                 path: n.name || `Node ${i}`,
+                                 kind: 'UNKNOWN',
+                                 attributes: n.attributes || {}
+                             });
+                         });
+                     }
+
+                     fs.writeFileSync(outputJsonPath, JSON.stringify(rvmIndex));
+                } catch(e) {
+                     // ignore if json post-process fails, just send raw
+                     console.error("Index processing error", e);
+                }
+            }
+        } else if (isJsonMode) {
+            args = [`--output-json=${outputJsonPath}`, inputPath];
+            if (attributesPath) args.push(attributesPath);
+            execution = await runProcess(parserExe, args, tempRoot);
+        } else {
+            args = [`--output-rev=${outputRevPath}`, inputPath];
+            if (attributesPath) args.push(attributesPath);
+            execution = await runProcess(parserExe, args, tempRoot);
+        }
+
+        const parseFailureRegex = /More END-tags and than NEW-tags|Failed to parse/i;
+        if (
+            execution.code !== 0 &&
+            attributesPath &&
+            parseFailureRegex.test(String(execution.stderr || ''))
+        ) {
+            const retryArgs = isGltfMode
+                ? [
+                    `--output-gltf=${outputGlbPath}`,
+                    `--output-json=${outputJsonPath}`,
+                    '--output-gltf-attributes=true',
+                    '--output-gltf-center=true',
+                    '--output-gltf-rotate-z-to-y=true',
+                    inputPath,
+                ]
+                : isJsonMode
+                    ? [`--output-json=${outputJsonPath}`, inputPath]
+                    : [`--output-rev=${outputRevPath}`, inputPath];
+            const retryExecution = await runProcess(parserExe, retryArgs, tempRoot);
+            if (retryExecution.code === 0) {
+                retryExecution.stderr = `Recovered from sidecar parse failure by retrying without sidecar.\n${retryExecution.stderr || ''}`;
+                execution = retryExecution;
+                args = retryArgs;
+            }
+        }
+
         const stdoutLines = splitLines(execution.stdout);
         const stderrLines = splitLines(execution.stderr);
 
@@ -196,22 +295,61 @@ async function handleNativeRvmToRev(req, res) {
             return;
         }
 
-        if (!fileExists(outputPath)) {
-            writeJson(res, 500, {
-                ok: false,
-                error: 'Native converter did not produce output REV file.',
+        if (isGltfMode) {
+             if (!fileExists(outputGlbPath) || !fileExists(outputJsonPath)) {
+                writeJson(res, 500, {
+                    ok: false,
+                    error: 'Native converter did not produce GLB or JSON file.',
+                    logs: { stdout: stdoutLines, stderr: stderrLines, argv: args, binary: parserExe },
+                });
+                return;
+             }
+
+             const glbBuffer = fs.readFileSync(outputGlbPath);
+             const indexJsonText = fs.readFileSync(outputJsonPath, 'utf8');
+
+             writeJson(res, 200, {
+                 ok: true,
+                 glbBase64: glbBuffer.toString('base64'),
+                 indexJson: JSON.parse(indexJsonText),
+                 logs: { stdout: stdoutLines, stderr: stderrLines, argv: args, binary: parserExe }
+             });
+
+        } else if (isJsonMode) {
+            if (!fileExists(outputJsonPath)) {
+                writeJson(res, 500, {
+                    ok: false,
+                    error: 'Native converter did not produce output JSON file.',
+                    logs: { stdout: stdoutLines, stderr: stderrLines, argv: args, binary: parserExe },
+                });
+                return;
+            }
+
+            const outputText = fs.readFileSync(outputJsonPath, 'utf8');
+            writeJson(res, 200, {
+                ok: true,
+                outputName: outputJsonName,
+                outputText,
                 logs: { stdout: stdoutLines, stderr: stderrLines, argv: args, binary: parserExe },
             });
-            return;
-        }
+        } else {
+            if (!fileExists(outputRevPath)) {
+                writeJson(res, 500, {
+                    ok: false,
+                    error: 'Native converter did not produce output REV file.',
+                    logs: { stdout: stdoutLines, stderr: stderrLines, argv: args, binary: parserExe },
+                });
+                return;
+            }
 
-        const outputText = fs.readFileSync(outputPath, 'utf8');
-        writeJson(res, 200, {
-            ok: true,
-            outputName,
-            outputText,
-            logs: { stdout: stdoutLines, stderr: stderrLines, argv: args, binary: parserExe },
-        });
+            const outputText = fs.readFileSync(outputRevPath, 'utf8');
+            writeJson(res, 200, {
+                ok: true,
+                outputName: outputRevName,
+                outputText,
+                logs: { stdout: stdoutLines, stderr: stderrLines, argv: args, binary: parserExe },
+            });
+        }
     } catch (error) {
         writeJson(res, 500, { ok: false, error: error.message });
     } finally {
@@ -277,3 +415,4 @@ http.createServer(async (req, res) => {
 }).listen(PORT);
 
 console.log(`Server running at http://localhost:${PORT}/`);
+

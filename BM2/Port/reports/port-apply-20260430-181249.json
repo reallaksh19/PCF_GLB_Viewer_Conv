@@ -1,0 +1,166 @@
+﻿{
+    "timestamp":  "2026-04-30T14:12:49.1142007Z",
+    "mode":  "apply",
+    "targetRoot":  "C:\\Code3\\PCF_GLB_Viewer_Conv_Latest",
+    "modules":  [
+                    {
+                        "moduleId":  "topo-support-model-exchange",
+                        "patch":  "patches/01_topo_support_model_exchange.patch",
+                        "patchStatus":  "applied",
+                        "overlays":  [
+                                         {
+                                             "path":  "viewer/core/app.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "opt/tab-visibility.json",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/opt/tab-visibility.json",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/source/adapter-registry.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/source/xml/CaesarXmlImportAdapter.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/tabs/model-exchange-tab.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/tabs/model-exchange-tab.css",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/source/rev/rev-text-parser.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/source/rev/RevImportAdapter.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/source/json/json-topo-parser.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/source/json/GenericJsonImportAdapter.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/topo/template-evaluator.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/topo/topo-mapping-profiles.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/topo/topo-builder.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/support/support-mapping-config.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/support/support-mapping-store.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/support/support-builder.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/interchange/view/Modelexh_PreviewRenderer.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/tabs/support-mapping-config-tab.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/tabs/support-mapping-config-tab.css",
+                                             "status":  "copied"
+                                         }
+                                     ]
+                    },
+                    {
+                        "moduleId":  "rvm-attribute-xml-compat",
+                        "patch":  "patches/02_rvm_attribute_xml_compat.patch",
+                        "patchStatus":  "applied",
+                        "overlays":  [
+                                         {
+                                             "path":  "viewer/converters/py-worker.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/converters/scripts/rvm_attribute_to_xml.py",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/converters/scripts/rvm_attribute_to_xml_to_cii.py",
+                                             "status":  "copied"
+                                         }
+                                     ]
+                    },
+                    {
+                        "moduleId":  "tests",
+                        "patch":  "patches/03_tests.patch",
+                        "patchStatus":  "applied",
+                        "overlays":  [
+                                         {
+                                             "path":  "viewer/tests/unit/interchange/adapter-registry.test.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/tests/unit/interchange/support-mapping-config.test.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/tests/integration/model-exchange-ui.test.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/tests/run-interface-tests.mjs",
+                                             "status":  "copied"
+                                         }
+                                     ]
+                    },
+                    {
+                        "moduleId":  "model-converters-3d-preview",
+                        "patch":  "patches/04_model_converters_3d_preview.patch",
+                        "patchStatus":  "applied",
+                        "overlays":  [
+                                         {
+                                             "path":  "viewer/tabs/model-converters-tab.js",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/tabs/model-converters-tab.css",
+                                             "status":  "copied"
+                                         },
+                                         {
+                                             "path":  "viewer/converters/view/3DModelConv_PreviewRenderer.js",
+                                             "status":  "copied"
+                                         }
+                                     ]
+                    },
+                    {
+                        "moduleId":  "overlay-only",
+                        "patch":  "",
+                        "patchStatus":  "n/a",
+                        "overlays":  [
+                                         {
+                                             "path":  "viewer/contracts/runtime-events.js",
+                                             "status":  "copied"
+                                         }
+                                     ]
+                    }
+                ]
+}

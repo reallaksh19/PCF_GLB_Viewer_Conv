@@ -106,6 +106,24 @@
   border-color: var(--geo-accent, #4a9eff);
 }
 
+.rvm-tool-btn[data-action^="SECTION_"] {
+  color: #c4dbff;
+  border-color: rgba(126, 182, 246, 0.45);
+  background: rgba(19, 58, 106, 0.2);
+}
+
+.rvm-tool-btn[data-action^="SECTION_"] svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.4;
+  filter: drop-shadow(0 0 1px rgba(8, 18, 32, 0.9));
+}
+
+.rvm-tool-btn.is-pressed {
+  transform: translateY(1px);
+  filter: brightness(1.1);
+}
+
 .rvm-btn-file {
   cursor: pointer;
 }
@@ -173,6 +191,11 @@
 }
 
 .rvm-tree li.is-selected {
+  background: var(--geo-accent, #4a9eff);
+  color: #fff;
+}
+
+.rvm-search-item.is-selected {
   background: var(--geo-accent, #4a9eff);
   color: #fff;
 }
@@ -326,3 +349,58 @@
 .rvm-tag-label.severity-high { border-color: #e74c3c; }
 .rvm-tag-label.severity-medium { border-color: #e2994a; }
 .rvm-tag-label.severity-low { border-color: #27ae60; }
+
+.rvm-tag-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.rvm-tag-modal.is-open {
+  display: flex;
+}
+
+.rvm-tag-modal-card {
+  width: min(420px, 92vw);
+  background: #1f2430;
+  border: 1px solid #394255;
+  border-radius: 8px;
+  padding: 14px;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rvm-tag-modal-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #dce6ff;
+}
+
+.rvm-tag-modal-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  color: #9fb0d8;
+}
+
+.rvm-tag-modal-row input,
+.rvm-tag-modal-row select {
+  background: #131922;
+  border: 1px solid #44506a;
+  color: #dbe6ff;
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.rvm-tag-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

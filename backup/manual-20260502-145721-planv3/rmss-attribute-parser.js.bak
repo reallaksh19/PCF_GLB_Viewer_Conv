@@ -1,0 +1,406 @@
+﻿/**
+ * Parses PDMS/AVEVA RMSS_ATTRIBUTE.TXT into a branch hierarchy that is usable
+ * by the RVM viewer topology renderer.
+ *
+ * Policy:
+ * - Keep fittings/support components from attributes.
+ * - Ignore unreliable source PIPE/TUBI entries in attribute text.
+ * - Auto-route synthetic PIPE members only when topology proves adjacency
+ *   (same OWNER sequence, HREF/TREF/CREF references) and explicit ports
+ *   APOS/LPOS/BPOS show a non-zero gap.
+ */
+
+const FITTING_TYPES = new Set(['VALV', 'FLAN', 'ELBO', 'BEND', 'TEE', 'OLET', 'GASK', 'REDU', 'INST']);
+const SOURCE_TYPES = new Set(['VALV', 'FLAN', 'ELBO', 'BEND', 'TEE', 'OLET', 'GASK', 'REDU', 'ATTA', 'INST']);
+const ROUTE_PORT_KEYS = ['APOS', 'LPOS', 'BPOS'];
+const PIPE_ROUTE_GAP_MM = 1.0;
+
+function parseCoord(value) {
+  if (!value) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const tokens = text.split(/\s+/g);
+  const out = { x: 0, y: 0, z: 0 };
+  for (let i = 0; i < tokens.length - 1; i += 2) {
+    const axis = tokens[i];
+    const raw = tokens[i + 1].replace(/mm/gi, '');
+    const num = Number.parseFloat(raw);
+    if (!Number.isFinite(num)) continue;
+    if (axis === 'E') out.x = num;
+    else if (axis === 'W') out.x = -num;
+    else if (axis === 'N') out.y = num;
+    else if (axis === 'S') out.y = -num;
+    else if (axis === 'U') out.z = num;
+    else if (axis === 'D') out.z = -num;
+  }
+  return out;
+}
+
+function coordDistance(a, b) {
+  if (!a || !b) return Number.POSITIVE_INFINITY;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const dz = b.z - a.z;
+  return Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
+}
+
+function normalizeToken(value) {
+  const text = String(value || '').trim();
+  return text ? text.toUpperCase() : '';
+}
+
+function parseTextBlocks(content) {
+  const lines = String(content || '').split(/\r?\n/g);
+  const objects = [];
+  let current = null;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith('NEW ')) {
+      if (current) objects.push(current);
+      current = { id: trimmed.substring(4).trim(), attributes: {} };
+      continue;
+    }
+    if (trimmed === 'END') {
+      if (current) {
+        objects.push(current);
+        current = null;
+      }
+      continue;
+    }
+    if (!current || !trimmed.includes(':=')) continue;
+    const idx = trimmed.indexOf(':=');
+    const key = trimmed.substring(0, idx).trim().replace(/^:/, '');
+    const val = trimmed.substring(idx + 2).trim();
+    current.attributes[key] = val;
+  }
+  if (current) objects.push(current);
+  return objects;
+}
+
+// Bore fields in order of reliability for AVEVA PDMS/E3D.
+const BORE_FIELDS = ['HBOR', 'TBOR', 'ABORE', 'LBORE', 'DTXR'];
+
+function extractBore(attrs) {
+  for (const field of BORE_FIELDS) {
+    const v = attrs?.[field];
+    const n = v ? Number.parseFloat(String(v).replace(/mm/gi, '').trim()) : NaN;
+    if (Number.isFinite(n) && n > 0) return { field, value: n, raw: v };
+  }
+  return null;
+}
+
+function hasInlineRouteMetadata(attrs) {
+  if (extractBore(attrs)) return true;
+  const joined = [
+    attrs?.TYPE,
+    attrs?.SPRE,
+    attrs?.LSTU,
+    attrs?.SKEY,
+    attrs?.NAME
+  ].map((value) => String(value || '').toUpperCase()).join(' ');
+  return /VALV|VALVE|INLINE|IN-LINE/.test(joined);
+}
+
+function shouldIncludeInst(attrs, apos, lpos) {
+  if (!apos || !lpos) return false;
+  return hasInlineRouteMetadata(attrs);
+}
+
+function toNode(comp) {
+  const type = String(comp?.attributes?.TYPE || '').toUpperCase();
+  const baseName = String(comp?.attributes?.NAME || comp?.id || '').trim() || 'Unnamed';
+  const apos = parseCoord(comp?.attributes?.APOS);
+  const lpos = parseCoord(comp?.attributes?.LPOS);
+  const bpos = parseCoord(comp?.attributes?.BPOS);
+  const hpos = parseCoord(comp?.attributes?.HPOS);
+  const tpos = parseCoord(comp?.attributes?.TPOS);
+  const pos = parseCoord(comp?.attributes?.POS);
+
+  if (type === 'ATTA') {
+    if (!comp?.attributes?.CMPSUPTYPE) return null;
+    return {
+      name: `SUPPORT ${baseName}`,
+      type: 'SUPPORT',
+      attributes: {
+        NAME: comp.attributes.NAME || baseName,
+        CMPSUPREFN: comp.attributes.CMPSUPREFN || '',
+        CMPSUPTYPE: comp.attributes.CMPSUPTYPE || '',
+        APOS: apos,
+        LPOS: lpos,
+        BPOS: bpos,
+        POS: pos
+      }
+    };
+  }
+
+  if (type === 'INST' && !shouldIncludeInst(comp.attributes, apos, lpos)) return null;
+  if (!SOURCE_TYPES.has(type)) return null;
+
+  // Carry all raw attributes through so 3D renderer and UI can inspect them.
+  const rawAttrs = {};
+  for (const [k, v] of Object.entries(comp.attributes)) {
+    rawAttrs[k] = v;
+  }
+
+  return {
+    name: `${type} ${baseName}`,
+    type,
+    attributes: {
+      ...rawAttrs,
+      APOS: apos,
+      LPOS: lpos,
+      BPOS: bpos,
+      HPOS: hpos,
+      TPOS: tpos,
+      POS: pos
+    }
+  };
+}
+
+function isFittingNode(node) {
+  if (!node || node.type === 'SUPPORT') return false;
+  return FITTING_TYPES.has(String(node.type || '').toUpperCase());
+}
+
+function collectPortCandidates(node) {
+  const attrs = node?.attributes || {};
+  const out = [];
+  for (const key of ROUTE_PORT_KEYS) {
+    const point = attrs[key];
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isFinite(point.z)) continue;
+    out.push({ key, coord: point });
+  }
+  return out;
+}
+
+function collectIdentityTokens(node) {
+  const attrs = node?.attributes || {};
+  const ids = new Set();
+  const add = (value) => {
+    const token = normalizeToken(value);
+    if (token) ids.add(token);
+  };
+  add(attrs.REF);
+  add(attrs.NAME);
+  add(node?.name);
+  return ids;
+}
+
+function ownerToken(node) {
+  return normalizeToken(node?.attributes?.OWNER);
+}
+
+function hasLinkTokenMatch(fromNode, toNode) {
+  const attrs = fromNode?.attributes || {};
+  const toIds = collectIdentityTokens(toNode);
+  const href = normalizeToken(attrs.HREF);
+  const tref = normalizeToken(attrs.TREF);
+  const cref = normalizeToken(attrs.CREF);
+
+  if (href && toIds.has(href)) return true;
+  if (tref && toIds.has(tref)) return true;
+  if (cref && (toIds.has(cref) || cref === ownerToken(toNode))) return true;
+  return false;
+}
+
+function isTopologyProvenPair(current, next, branchName) {
+  const branchKey = normalizeToken(branchName);
+  const ownerA = ownerToken(current);
+  const ownerB = ownerToken(next);
+  if (ownerA && ownerB && ownerA === ownerB && (!branchKey || ownerA === branchKey)) return true;
+  if (hasLinkTokenMatch(current, next)) return true;
+  if (hasLinkTokenMatch(next, current)) return true;
+  return false;
+}
+
+function resolvePreferredPortKeys(current, next) {
+  const currentIds = collectIdentityTokens(current);
+  const nextIds = collectIdentityTokens(next);
+  const currentAttrs = current?.attributes || {};
+  const nextAttrs = next?.attributes || {};
+  const currentPreferred = new Set();
+  const nextPreferred = new Set();
+
+  const currentHref = normalizeToken(currentAttrs.HREF);
+  const currentTref = normalizeToken(currentAttrs.TREF);
+  const nextHref = normalizeToken(nextAttrs.HREF);
+  const nextTref = normalizeToken(nextAttrs.TREF);
+
+  if ((currentTref && nextIds.has(currentTref)) || (nextHref && currentIds.has(nextHref))) {
+    currentPreferred.add('LPOS');
+    nextPreferred.add('APOS');
+  }
+  if ((currentHref && nextIds.has(currentHref)) || (nextTref && currentIds.has(nextTref))) {
+    currentPreferred.add('APOS');
+    nextPreferred.add('LPOS');
+  }
+
+  const currentCref = normalizeToken(currentAttrs.CREF);
+  const nextCref = normalizeToken(nextAttrs.CREF);
+  if (currentCref && currentCref === ownerToken(next)) currentPreferred.add('BPOS');
+  if (nextCref && nextCref === ownerToken(current)) nextPreferred.add('BPOS');
+
+  return { currentPreferred, nextPreferred };
+}
+
+function selectExactPortPair(current, next) {
+  const currentPorts = collectPortCandidates(current);
+  const nextPorts = collectPortCandidates(next);
+  if (!currentPorts.length || !nextPorts.length) return null;
+
+  const preferred = resolvePreferredPortKeys(current, next);
+  const currentPreferredPorts = preferred.currentPreferred.size
+    ? currentPorts.filter((entry) => preferred.currentPreferred.has(entry.key))
+    : [];
+  const nextPreferredPorts = preferred.nextPreferred.size
+    ? nextPorts.filter((entry) => preferred.nextPreferred.has(entry.key))
+    : [];
+  const startPorts = currentPreferredPorts.length ? currentPreferredPorts : currentPorts;
+  const endPorts = nextPreferredPorts.length ? nextPreferredPorts : nextPorts;
+
+  let best = null;
+  let bestGap = Number.POSITIVE_INFINITY;
+  for (const start of startPorts) {
+    for (const end of endPorts) {
+      const gap = coordDistance(start.coord, end.coord);
+      if (!Number.isFinite(gap)) continue;
+      if (gap < bestGap) {
+        bestGap = gap;
+        best = {
+          start: start.coord,
+          end: end.coord,
+          startKey: start.key,
+          endKey: end.key,
+          gap
+        };
+      }
+    }
+  }
+  return best;
+}
+
+function routeBranchPipes(branchName, children, branchBore) {
+  const fittings = [];
+  for (const child of children) {
+    if (!isFittingNode(child)) continue;
+    if (!collectPortCandidates(child).length) continue;
+    fittings.push(child);
+  }
+  if (fittings.length < 2) return children;
+
+  const syntheticAfter = new Map();
+  for (let i = 0; i < fittings.length - 1; i += 1) {
+    const current = fittings[i];
+    const next = fittings[i + 1];
+    if (!isTopologyProvenPair(current, next, branchName)) continue;
+
+    const pair = selectExactPortPair(current, next);
+    if (!pair) continue;
+
+    const start = pair.start;
+    const end = pair.end;
+    const gap = pair.gap;
+    if (!Number.isFinite(gap) || gap <= PIPE_ROUTE_GAP_MM) continue;
+
+    // Bore inheritance: current fitting -> next fitting -> branch -> undefined.
+    const boreSrc = extractBore(current.attributes)
+      || extractBore(next.attributes)
+      || (branchBore ? { field: 'HBOR', value: branchBore, raw: String(branchBore) } : null);
+
+    const pipeAttrs = {
+      APOS: { x: start.x, y: start.y, z: start.z },
+      LPOS: { x: end.x, y: end.y, z: end.z },
+      AUTO_GENERATED_PIPE: 'true',
+      GAP_MM: gap.toFixed(3)
+    };
+
+    if (boreSrc) {
+      pipeAttrs[boreSrc.field] = boreSrc.raw;
+      pipeAttrs.BORE_SOURCE = `inherited from ${boreSrc.field} of adjacent fitting`;
+    }
+
+    const autoPipe = {
+      name: `PIPE AUTO ${branchName} ${i + 1}`,
+      type: 'PIPE',
+      attributes: pipeAttrs
+    };
+
+    if (!syntheticAfter.has(current)) syntheticAfter.set(current, []);
+    syntheticAfter.get(current).push(autoPipe);
+  }
+
+  const merged = [];
+  for (const child of children) {
+    merged.push(child);
+    const extras = syntheticAfter.get(child);
+    if (extras && extras.length > 0) merged.push(...extras);
+  }
+  return merged;
+}
+
+function parseRmssAttributes(content) {
+  const allObjects = parseTextBlocks(content);
+  const branches = allObjects.filter((obj) => String(obj?.attributes?.TYPE || '').toUpperCase() === 'BRAN');
+  const sourceComponents = allObjects.filter((obj) => SOURCE_TYPES.has(String(obj?.attributes?.TYPE || '').toUpperCase()));
+
+  const branchMap = new Map();
+  for (const branch of branches) {
+    const branchName = String(branch?.attributes?.NAME || branch?.id || '').trim();
+    if (!branchName) continue;
+
+    const boreSrc = extractBore(branch.attributes);
+    branchMap.set(branchName, {
+      name: branchName,
+      type: 'BRANCH',
+      bore: boreSrc?.raw || branch.attributes.HBOR || branch.attributes.TBOR || 'Unknown',
+      _boreValue: boreSrc?.value || null,
+      attributes: {
+        HBOR: branch.attributes.HBOR,
+        TBOR: branch.attributes.TBOR,
+        DTXR: branch.attributes.DTXR,
+        ABORE: branch.attributes.ABORE,
+        HPOS: parseCoord(branch.attributes.HPOS) || branch.attributes.HPOS,
+        TPOS: parseCoord(branch.attributes.TPOS) || branch.attributes.TPOS,
+        HREF: branch.attributes.HREF,
+        TREF: branch.attributes.TREF,
+        CREF: branch.attributes.CREF
+      },
+      children: []
+    });
+  }
+
+  for (const comp of sourceComponents) {
+    const owner = String(comp?.attributes?.OWNER || '').trim();
+    if (!owner || !branchMap.has(owner)) continue;
+    const node = toNode(comp);
+    if (!node) continue;
+    branchMap.get(owner).children.push(node);
+  }
+
+  const out = [];
+  for (const [branchName, branch] of branchMap.entries()) {
+    const routed = routeBranchPipes(branchName, branch.children, branch._boreValue);
+    if (!routed.length) continue;
+    out.push({
+      ...branch,
+      children: routed
+    });
+  }
+
+  return out;
+}
+
+export { parseRmssAttributes };
+
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
+  const fs = require('fs');
+  const args = process.argv.slice(2);
+  if (!args.length) {
+    console.error('Usage: node rmss-attribute-parser.js <path_to_RMSS_ATTRIBUTE.TXT>');
+    process.exit(1);
+  }
+  const fileContent = fs.readFileSync(args[0], 'utf-8');
+  const result = parseRmssAttributes(fileContent);
+  console.log(JSON.stringify(result, null, 2));
+}

@@ -44,6 +44,7 @@ function converterSpec(converterId) {
   if (converterId === 'rvm_to_rev') return { script: 'rvm_to_rev.py', extension: '.rev' };
   if (converterId === 'rev_to_pcf') return { script: 'rev_to_pcf.py', extension: '.pcf' };
   if (converterId === 'rev_to_xml') return { script: 'rev_to_xml.py', extension: '.xml' };
+  if (converterId === 'json_to_xml') return { script: 'json_to_xml.py', extension: '.xml' };
   if (converterId === 'rev_to_stp') return { script: 'rev_to_stp.py', extension: '.stp' };
   if (converterId === 'xml_to_cii') return { script: 'xml_to_cii.py', extension: '.cii' };
   if (converterId === 'inputxml_to_cii') return { script: 'inputxml_to_cii.py', extension: '.cii' };
@@ -74,6 +75,21 @@ export function buildInvocation(converterId, primaryPath, primaryName, secondary
     pushOptionalStringArg(argv, '--purpose', options?.purpose);
     pushOptionalStringArg(argv, '--title-line', options?.titleLine);
     if (options?.enablePsiRigidLogic) argv.push('--enable-psi-rigid-logic');
+  } else if (converterId === 'json_to_xml') {
+    argv.push('--coord-factor', String(toFiniteNumber(options?.coordFactor, 1000)));
+    pushOptionalNumberArg(argv, '--node-start', options?.nodeStart);
+    pushOptionalNumberArg(argv, '--node-step', options?.nodeStep);
+    pushOptionalNumberArg(argv, '--default-diameter', options?.defaultDiameter);
+    pushOptionalNumberArg(argv, '--default-wall-thickness', options?.defaultWallThickness);
+    pushOptionalNumberArg(argv, '--default-corrosion-allowance', options?.defaultCorrosionAllowance);
+    pushOptionalNumberArg(argv, '--default-insulation-thickness', options?.defaultInsulationThickness);
+    pushOptionalNumberArg(argv, '--mock-temperature', options?.mockTemperature);
+    pushOptionalNumberArg(argv, '--mock-temperature-other', options?.mockTemperatureOther);
+    pushOptionalNumberArg(argv, '--mock-pressure', options?.mockPressure);
+    pushOptionalNumberArg(argv, '--mock-pressure-other', options?.mockPressureOther);
+    pushOptionalNumberArg(argv, '--mock-material-number', options?.mockMaterialNumber);
+    pushOptionalNumberArg(argv, '--mock-insulation-density', options?.mockInsulationDensity);
+    pushOptionalNumberArg(argv, '--mock-fluid-density', options?.mockFluidDensity);
   } else if (converterId === 'rev_to_stp') {
     argv.push('--coord-factor', String(toFiniteNumber(options?.coordFactor, 1000)));
     pushOptionalStringArg(argv, '--support-path-contains', options?.supportPathContains);

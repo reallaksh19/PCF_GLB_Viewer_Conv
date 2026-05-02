@@ -70,8 +70,8 @@ const ACTION_ICONS = {
   SNAP_ISO_NE: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="4"/><path d="M17 7h-4"/><path d="M17 11v-4"/></svg>',
   SNAP_ISO_SW: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="4"/><path d="M7 17h4"/><path d="M7 13v4"/></svg>',
   SNAP_ISO_SE: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="4"/><path d="M17 17h-4"/><path d="M17 13v4"/></svg>',
-  SECTION_BOX: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
-  SECTION_PLANE_UP: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>',
+  SECTION_BOX: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" fill-opacity="0.16"/><path d="M4 10h16"/><path d="M10 4v16"/></svg>',
+  SECTION_PLANE_UP: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16h18"/><path d="M12 4v10"/><path d="m8.5 8.5 3.5-4 3.5 4"/></svg>',
   SECTION_DISABLE: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg>',
 };
 
@@ -171,18 +171,21 @@ export function renderViewer3D(container) {
                 <span class="viewer3d-icon-glyph">${SPARE_ICON_UPLOAD}</span>
                 <span class="viewer3d-icon-label">Spare 2</span>
               </button>
-              <label class="btn-secondary file-label">
-                <input type="file" id="viewer3d-pcf-input" accept=".pcf,.PCF" style="display:none">
-                Load .PCF
-              </label>
-              <label class="btn-secondary file-label" id="viewer3d-import-step-label" title="Import structural STEP members (.stp/.step)">
-                <input type="file" id="viewer3d-step-input" accept=".stp,.step,.STP,.STEP" style="display:none">
-                Import .STP
-              </label>
-              <label class="btn-secondary file-label" id="viewer3d-import-raw-label" title="Import piping model directly from ACCDB/MDB, XML, or PDF">
-                <input type="file" id="viewer3d-import-raw-input" accept=".accdb,.mdb,.xml,.pdf" style="display:none">
-                Import ACCDB/XML/PDF
-              </label>
+              <div class="viewer-import-group" style="display:flex; gap: 6px; align-items: center; background: rgba(0,0,0,0.15); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05); margin-left: 12px;">
+                <span style="font-size: 0.75rem; font-weight: 600; opacity: 0.6; text-transform: uppercase; margin-right: 4px; letter-spacing: 0.5px;">Import</span>
+                <label class="btn-primary file-label" style="padding: 6px 12px; cursor:pointer;" title="Import main PCF piping model">
+                  <input type="file" id="viewer3d-pcf-input" accept=".pcf,.PCF" style="display:none">
+                  PCF
+                </label>
+                <label class="btn-secondary file-label" id="viewer3d-import-step-label" style="padding: 6px 12px; cursor:pointer;" title="Append structural STEP members (.stp/.step)">
+                  <input type="file" id="viewer3d-step-input" accept=".stp,.step,.STP,.STEP" style="display:none">
+                  STP
+                </label>
+                <label class="btn-secondary file-label" id="viewer3d-import-raw-label" style="padding: 6px 12px; cursor:pointer;" title="Import piping model directly from ACCDB/MDB, XML, or PDF">
+                  <input type="file" id="viewer3d-import-raw-input" accept=".accdb,.mdb,.xml,.pdf" style="display:none">
+                  DB/XML
+                </label>
+              </div>
               <button class="btn-secondary" id="viewer3d-open-config">Config</button>
               <button
                 class="ribbon-toggle-btn ${_ribbonCollapsed ? 'is-collapsed' : ''}"
@@ -281,7 +284,7 @@ export function renderViewer3D(container) {
                 </label>
               </div>
 
-              <div class="left-panel-group">
+              <div class="left-panel-group" id="viewer3d-section-controls-group">
                 <div class="left-panel-group-title">Clip / Plane</div>
                 <label class="left-panel-label">Clip
                   <select id="viewer3d-section-mode">
@@ -540,6 +543,20 @@ function _wireViewerControls(container, cfg, actions) {
   };
   setSettingsCollapsed(_leftSettingsCollapsed);
   settingsToggle?.addEventListener('click', () => setSettingsCollapsed(!_leftSettingsCollapsed));
+  let sectionFocusTimeoutId = null;
+  const revealSectionControls = () => {
+    setSettingsCollapsed(false);
+    const panelBody = settingsPanel?.querySelector('.left-panel-body');
+    const sectionGroup = settingsPanel?.querySelector('#viewer3d-section-controls-group');
+    if (panelBody && sectionGroup) {
+      panelBody.scrollTop = Math.max(0, sectionGroup.offsetTop - 12);
+      sectionGroup.classList.add('section-controls-focus');
+      if (sectionFocusTimeoutId !== null) window.clearTimeout(sectionFocusTimeoutId);
+      sectionFocusTimeoutId = window.setTimeout(() => {
+        sectionGroup.classList.remove('section-controls-focus');
+      }, 1000);
+    }
+  };
 
   const loadMockData = async (mockKey) => {
     try {
@@ -829,6 +846,18 @@ function _wireViewerControls(container, cfg, actions) {
   container.querySelectorAll('[data-viewer-action]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const actionId = btn.getAttribute('data-viewer-action');
+      if (actionId === 'SECTION_BOX') {
+        revealSectionControls();
+        const select = container.querySelector('#viewer3d-section-mode');
+        if (select) select.value = 'BOX';
+      } else if (actionId === 'SECTION_PLANE_UP') {
+        revealSectionControls();
+        const select = container.querySelector('#viewer3d-section-mode');
+        if (select) select.value = 'PLANE_UP';
+      } else if (actionId === 'SECTION_DISABLE') {
+        const select = container.querySelector('#viewer3d-section-mode');
+        if (select) select.value = 'OFF';
+      }
       executeViewerAction(_viewer, actionId);
       _updateToolbarActiveState(container, actionId);
     });

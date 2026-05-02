@@ -378,11 +378,32 @@ function rayEntryPorts(node) {
 }
 
 function legacySequentialPair(current, next) {
+  // Primary: strict LPOS→APOS (original behaviour, preserved when both ports are present)
   const start = current?.attributes?.LPOS;
   const end = next?.attributes?.APOS;
   const gap = coordDistance(start, end);
-  if (!Number.isFinite(gap)) return null;
-  return { start, end, startKey: 'LPOS', endKey: 'APOS', gap };
+  if (Number.isFinite(gap)) return { start, end, startKey: 'LPOS', endKey: 'APOS', gap };
+
+  // Fallback: LPOS or APOS is absent on one side. Find the closest available port pair
+  // across {APOS, LPOS, BPOS} × {APOS, LPOS, BPOS} to bridge the physical gap.
+  // Soundness: adjacent fittings in a branch are always physically closest to each other,
+  // so the minimum-distance port pair always identifies the intended pipe connection.
+  const currentPorts = collectPortCandidates(current);
+  const nextPorts = collectPortCandidates(next);
+  if (!currentPorts.length || !nextPorts.length) return null;
+  let best = null;
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const a of currentPorts) {
+    for (const b of nextPorts) {
+      const dist = coordDistance(a.coord, b.coord);
+      if (!Number.isFinite(dist)) continue;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = { start: a.coord, end: b.coord, startKey: a.key, endKey: b.key, gap: dist };
+      }
+    }
+  }
+  return best;
 }
 
 function adaptiveRayMaxGap(unresolvedEntries) {
@@ -413,7 +434,7 @@ function adaptiveRayMaxGap(unresolvedEntries) {
   return clamp(p75 + (1.5 * iqr), 50, 1500);
 }
 
-function routeBranchPipes(branchName, children, branchBore, rawRouteOptions) {
+function routeBranchPipes(branchName, children, branchBore, rawRouteOptions, endpoints = null) {
   const routeOptions = resolveRouteOptions(rawRouteOptions);
   const fittings = [];
   for (let i = 0; i < children.length; i += 1) {
@@ -422,7 +443,7 @@ function routeBranchPipes(branchName, children, branchBore, rawRouteOptions) {
     if (!collectPortCandidates(child).length) continue;
     fittings.push({ node: child, seqIndex: i });
   }
-  if (fittings.length < 2) return children;
+  if (fittings.length === 0) return children;
 
   const syntheticAfter = new Map();
   const pairUsed = new Set();
@@ -539,12 +560,77 @@ function routeBranchPipes(branchName, children, branchBore, rawRouteOptions) {
     }
   }
 
+  // Bridge HPOS → first fitting and last fitting → TPOS with synthetic stub pipes.
+  // These represent the physical pipe run between the branch connection point and the
+  // nearest fitting. The fitting-to-fitting loop above only routes adjacent pairs;
+  // the head/tail stubs must be created separately.
+  const hpos = (endpoints?.hpos && typeof endpoints.hpos === 'object' && Number.isFinite(endpoints.hpos.x)) ? endpoints.hpos : null;
+  const tpos = (endpoints?.tpos && typeof endpoints.tpos === 'object' && Number.isFinite(endpoints.tpos.x)) ? endpoints.tpos : null;
+
+  const headPipes = [];
+  if (hpos && fittings.length > 0) {
+    const firstFitting = fittings[0];
+    const firstPorts = collectPortCandidates(firstFitting.node);
+    let nearestPort = null;
+    let nearestDist = Number.POSITIVE_INFINITY;
+    for (const p of firstPorts) {
+      const d = coordDistance(hpos, p.coord);
+      if (d < nearestDist) { nearestDist = d; nearestPort = p; }
+    }
+    if (nearestPort && nearestDist > PIPE_ROUTE_GAP_MM) {
+      const boreSrc = extractBore(firstFitting.node.attributes)
+        || (branchBore ? { field: 'HBOR', value: branchBore, raw: String(branchBore) } : null);
+      const pipeAttrs = {
+        APOS: { x: hpos.x, y: hpos.y, z: hpos.z },
+        LPOS: { x: nearestPort.coord.x, y: nearestPort.coord.y, z: nearestPort.coord.z },
+        AUTO_GENERATED_PIPE: 'true',
+        GAP_MM: nearestDist.toFixed(3),
+        ROUTE_TIER: 'BRANCH_HEAD'
+      };
+      if (boreSrc) {
+        pipeAttrs[boreSrc.field] = boreSrc.raw;
+        pipeAttrs.BORE_SOURCE = `inherited from ${boreSrc.field} of adjacent fitting`;
+      }
+      headPipes.push({ name: `PIPE AUTO ${branchName} HEAD`, type: 'PIPE', attributes: pipeAttrs });
+    }
+  }
+
+  const tailPipes = [];
+  if (tpos && fittings.length > 0) {
+    const lastFitting = fittings[fittings.length - 1];
+    const lastPorts = collectPortCandidates(lastFitting.node);
+    let nearestPort = null;
+    let nearestDist = Number.POSITIVE_INFINITY;
+    for (const p of lastPorts) {
+      const d = coordDistance(tpos, p.coord);
+      if (d < nearestDist) { nearestDist = d; nearestPort = p; }
+    }
+    if (nearestPort && nearestDist > PIPE_ROUTE_GAP_MM) {
+      const boreSrc = extractBore(lastFitting.node.attributes)
+        || (branchBore ? { field: 'TBOR', value: branchBore, raw: String(branchBore) } : null);
+      const pipeAttrs = {
+        APOS: { x: nearestPort.coord.x, y: nearestPort.coord.y, z: nearestPort.coord.z },
+        LPOS: { x: tpos.x, y: tpos.y, z: tpos.z },
+        AUTO_GENERATED_PIPE: 'true',
+        GAP_MM: nearestDist.toFixed(3),
+        ROUTE_TIER: 'BRANCH_TAIL'
+      };
+      if (boreSrc) {
+        pipeAttrs[boreSrc.field] = boreSrc.raw;
+        pipeAttrs.BORE_SOURCE = `inherited from ${boreSrc.field} of adjacent fitting`;
+      }
+      tailPipes.push({ name: `PIPE AUTO ${branchName} TAIL`, type: 'PIPE', attributes: pipeAttrs });
+    }
+  }
+
   const merged = [];
+  merged.push(...headPipes);
   for (const child of children) {
     merged.push(child);
     const extras = syntheticAfter.get(child);
     if (extras && extras.length > 0) merged.push(...extras);
   }
+  merged.push(...tailPipes);
   return merged;
 }
 
@@ -590,7 +676,9 @@ function parseRmssAttributes(content, rawRouteOptions) {
 
   const out = [];
   for (const [branchName, branch] of branchMap.entries()) {
-    const routed = routeBranchPipes(branchName, branch.children, branch._boreValue, routeOptions);
+    const hpos = (branch.attributes.HPOS && typeof branch.attributes.HPOS === 'object') ? branch.attributes.HPOS : null;
+    const tpos = (branch.attributes.TPOS && typeof branch.attributes.TPOS === 'object') ? branch.attributes.TPOS : null;
+    const routed = routeBranchPipes(branchName, branch.children, branch._boreValue, routeOptions, { hpos, tpos });
     if (!routed.length) continue;
     out.push({
       ...branch,

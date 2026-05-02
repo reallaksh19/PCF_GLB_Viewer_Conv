@@ -567,11 +567,32 @@ function rayEntryPorts(points) {
 }
 
 function legacySequentialPair(currentPts, nextPts) {
+  // Primary: strict LPOS→APOS (original behaviour, preserved when both ports are present)
   const start = currentPts?.lpos;
   const end = nextPts?.apos;
   const gap = coordDistance(start, end);
-  if (!Number.isFinite(gap)) return null;
-  return { start, end, startKey: 'LPOS', endKey: 'APOS', gap };
+  if (Number.isFinite(gap)) return { start, end, startKey: 'LPOS', endKey: 'APOS', gap };
+
+  // Fallback: LPOS or APOS is absent on one side. Find the closest available port pair
+  // across {APOS, LPOS, BPOS} × {APOS, LPOS, BPOS} to bridge the physical gap.
+  // Soundness: adjacent fittings in a branch are always physically closest to each other,
+  // so the minimum-distance port pair always identifies the intended pipe connection.
+  const aCandidates = exactPortCandidatesFromPoints(currentPts);
+  const bCandidates = exactPortCandidatesFromPoints(nextPts);
+  if (!aCandidates.length || !bCandidates.length) return null;
+  let best = null;
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const a of aCandidates) {
+    for (const b of bCandidates) {
+      const dist = coordDistance(a.coord, b.coord);
+      if (!Number.isFinite(dist)) continue;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = { start: a.coord, end: b.coord, startKey: a.key, endKey: b.key, gap: dist };
+      }
+    }
+  }
+  return best;
 }
 
 function adaptiveRayMaxGap(entries) {
@@ -632,7 +653,7 @@ function routeBranchChildren(branchNode, rawRoutingConfig) {
     .filter((entry) => isRouteableFittingEntry(entry, routingConfig))
     .map((entry, index) => ({ ...entry, seqIndex: index }));
 
-  if (fittings.length < 2) return filtered;
+  if (fittings.length === 0) return filtered;
 
   const spans = fittings.map((fitting) => {
     const dims = bboxDims(fitting.child);
@@ -750,12 +771,59 @@ function routeBranchChildren(branchNode, rawRoutingConfig) {
     }
   }
 
+  // Bridge HPOS → first fitting and last fitting → TPOS with synthetic stub pipes.
+  // The fitting-to-fitting loop only routes adjacent pairs; these stubs cover the
+  // physical pipe run between the branch connection point and the nearest fitting.
+  const branchAttrs = getAttrs(branchNode);
+  const hpos = normalizeCoord(branchAttrs.HPOS ?? branchNode.HPOS);
+  const tpos = normalizeCoord(branchAttrs.TPOS ?? branchNode.TPOS);
+
+  const headPipes = [];
+  if (hpos && fittings.length > 0) {
+    const firstFitting = fittings[0];
+    const firstPts = getAposLpos(firstFitting.raw);
+    const firstPorts = exactPortCandidatesFromPoints(firstPts);
+    let nearestPort = null;
+    let nearestDist = Number.POSITIVE_INFINITY;
+    for (const p of firstPorts) {
+      const d = coordDistance(hpos, p.coord);
+      if (d < nearestDist) { nearestDist = d; nearestPort = p; }
+    }
+    if (nearestPort && nearestDist > routeGapTolerance) {
+      const bore = pickBore(getAttrs(firstFitting.child)) || branchBore;
+      const pipe = createAutoPipeElement(branchNode, 'HEAD', hpos, nearestPort.coord, bore);
+      pipe.attributes.ROUTE_TIER = 'BRANCH_HEAD';
+      headPipes.push(pipe);
+    }
+  }
+
+  const tailPipes = [];
+  if (tpos && fittings.length > 0) {
+    const lastFitting = fittings[fittings.length - 1];
+    const lastPts = getAposLpos(lastFitting.raw);
+    const lastPorts = exactPortCandidatesFromPoints(lastPts);
+    let nearestPort = null;
+    let nearestDist = Number.POSITIVE_INFINITY;
+    for (const p of lastPorts) {
+      const d = coordDistance(tpos, p.coord);
+      if (d < nearestDist) { nearestDist = d; nearestPort = p; }
+    }
+    if (nearestPort && nearestDist > routeGapTolerance) {
+      const bore = pickBore(getAttrs(lastFitting.child)) || branchBore;
+      const pipe = createAutoPipeElement(branchNode, 'TAIL', nearestPort.coord, tpos, bore);
+      pipe.attributes.ROUTE_TIER = 'BRANCH_TAIL';
+      tailPipes.push(pipe);
+    }
+  }
+
   const merged = [];
+  merged.push(...headPipes);
   for (const child of filtered) {
     merged.push(child);
     const extras = syntheticAfter.get(child);
     if (extras && extras.length) merged.push(...extras);
   }
+  merged.push(...tailPipes);
   return merged;
 }
 
@@ -1080,7 +1148,12 @@ function buildTeeAssembly(startVec, endVec, centerVec, branchVec, branchAxisHint
 // Used when only a single outlet point exists (no reliable APOS/LPOS span).
 function buildOletPointAssembly(centerVec, orientationAxes, radius, branchRadius, color, branchAxisOverride) {
   if (!centerVec) return null;
-  const overrideAxis = (branchAxisOverride && branchAxisOverride.length() > 0.01)
+  // Capture the raw CREF distance before normalising — used to extend the nozzle
+  // all the way to the branch connection point so it protrudes past the run-pipe wall.
+  const overrideRawLen = (branchAxisOverride && branchAxisOverride.length() > 0.01)
+    ? branchAxisOverride.length()
+    : 0;
+  const overrideAxis = overrideRawLen > 0
     ? branchAxisOverride.clone().normalize()
     : null;
   const axisFromOri = orientationAxes?.yAxis
@@ -1090,7 +1163,12 @@ function buildOletPointAssembly(centerVec, orientationAxes, radius, branchRadius
   const material = new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.16 });
   const group = new THREE.Group();
 
-  const neckLen = Math.max(branchRadius * 2.2, radius * 0.7, 8);
+  // neckLen must reach past the run-pipe surface (radius) to be visible.
+  // When the CREF anchor distance is known, extend the nozzle to cover the full gap
+  // from the run-pipe centreline to the branch connection point.
+  const neckLen = overrideRawLen > 0
+    ? Math.max(overrideRawLen, radius * 1.2, branchRadius * 2.2)
+    : Math.max(branchRadius * 2.2, radius * 1.2, 8);
   const tip = centerVec.clone().addScaledVector(branchAxis, neckLen);
   const neck = createSegmentCylinder(centerVec, tip, Math.max(branchRadius * 0.92, 0.8), material, 14);
   if (neck) group.add(neck);
@@ -1214,7 +1292,8 @@ function buildSegmentMesh(element, currentPath, defaultRadius, renderContext) {
   let color = 0x657083;
   if (type === 'PIPE') color = 0x3d74c5;
   else if (type === 'VALVE') color = 0xcc2222;
-  else if (type === 'FLANGE' || type === 'GASK') color = 0x9a9a9a;
+  else if (type === 'FLANGE') color = 0x9a9a9a;
+  else if (type === 'GASK') color = 0x444444;   // dark charcoal — visually distinct from flanges
   else if (type === 'REDUCER') color = 0x8f8f8f;
   else if (type === 'ELBOW' || type === 'BEND') color = 0xaa55aa;
   else if (type === 'TEE' || type === 'OLET') color = 0x55aa55;
@@ -1240,8 +1319,20 @@ function buildSegmentMesh(element, currentPath, defaultRadius, renderContext) {
 
     if (type === 'VALVE') {
       renderable = buildValveAssembly(startVec, endVec, radius, color, flangeColor, webColor);
-    } else if (type === 'FLANGE' || type === 'GASK') {
+    } else if (type === 'FLANGE') {
       renderable = buildFlangeAssembly(startVec, endVec, radius, flangeColor, webColor);
+    } else if (type === 'GASK') {
+      // Gaskets are physically thin (typically 2–5 mm). Rendering them as a two-disc
+      // flange assembly causes z-fighting with adjacent flange faces because all three
+      // surfaces are nearly co-planar. Instead, render a SINGLE solid disc at the
+      // midpoint with a guaranteed minimum visual thickness, in a darker charcoal so
+      // it is clearly distinguishable from the grey flanges on either side.
+      const gaskMid = new THREE.Vector3().addVectors(startVec, endVec).multiplyScalar(0.5);
+      const gaskNormal = new THREE.Vector3().subVectors(endVec, startVec).normalize();
+      const gaskDiscRadius = radius * 1.95;
+      const gaskThickness = Math.max(length * 0.6, radius * 0.12, 2.0);
+      const gaskMaterial = new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0.05 });
+      renderable = createDiscMesh(gaskMid, gaskNormal, gaskDiscRadius, gaskThickness, gaskMaterial);
     } else if (type === 'TEE' || type === 'OLET') {
       renderable = buildTeeAssembly(
         startVec,
@@ -1265,7 +1356,8 @@ function buildSegmentMesh(element, currentPath, defaultRadius, renderContext) {
     const pos = new THREE.Vector3(centerPt.x, centerPt.y, centerPt.z);
     let sphereRadius = radius;
     if (type === 'VALVE') sphereRadius = radius * 1.45;
-    else if (type === 'FLANGE' || type === 'GASK') sphereRadius = radius * 1.25;
+    else if (type === 'FLANGE') sphereRadius = radius * 1.25;
+    else if (type === 'GASK') sphereRadius = radius * 1.25;
     else if (type === 'ELBOW' || type === 'BEND' || type === 'TEE' || type === 'OLET') sphereRadius = radius * 1.2;
     else if (SUPPORT_TYPES.has(type)) sphereRadius = Math.max(radius * 0.85, 8);
 

@@ -71,6 +71,13 @@ export function createCameraController(camera, domElement) {
       controls.update();
     },
 
+    setTarget(targetVec) {
+      if (targetVec && targetVec.isVector3) {
+         controls.target.copy(targetVec);
+         controls.update();
+      }
+    },
+
     resetHome() {
       setProjection(homeMode);
       activeCamera.position.copy(homePosition);

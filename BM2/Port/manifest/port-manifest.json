@@ -1,0 +1,248 @@
+{
+  "version": "1.0.0",
+  "createdAtUtc": "2026-04-30T00:45:14.120775+00:00",
+  "sourceRoot": "C:\\Code3\\PCF_GLB_Viewer_Conv",
+  "portRoot": "C:\\Code3\\PCF_GLB_Viewer_Conv\\BM2\\Port",
+  "modules": [
+    {
+      "id": "topo-support-model-exchange",
+      "title": "Topo/Support Intermediate Layer for Model Exchange",
+      "patchFile": "patches/01_topo_support_model_exchange.patch",
+      "dependsOn": [],
+      "files": [
+        {
+          "path": "viewer/core/app.js",
+          "sha256": "8fc30698f1ec99e7b9c051248131f8ee773854730d5d9c2a7ce7a710a24013a7",
+          "bytes": 6676,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "opt/tab-visibility.json",
+          "sha256": "8f5c29cc780c91277bcd97a0ad2893df93658875c252bca500f5be86ef441063",
+          "bytes": 219,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/opt/tab-visibility.json",
+          "sha256": "e984f3715da968b9868ccdfb14b65b09f07aee13675bef36b48f2add766877f0",
+          "bytes": 244,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/interchange/source/adapter-registry.js",
+          "sha256": "bdef3ac6b00def0d27fadc30eac3ff657755e0933f218f573e8ae16049656b96",
+          "bytes": 2020,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/interchange/source/xml/CaesarXmlImportAdapter.js",
+          "sha256": "ec8c9202d519a3f5ddd0b14946b252ed44ae40c0501511c145fd94e1d1976fd4",
+          "bytes": 6347,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/tabs/model-exchange-tab.js",
+          "sha256": "4b606c2bf80ced2691eb0c650de54c930f7e07dffb94e4146c0fc7c345116490",
+          "bytes": 14930,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/tabs/model-exchange-tab.css",
+          "sha256": "29c005da9d92c6a8ac366f3184ac8a6b8042b95e791e5366c34316cb05c09164",
+          "bytes": 3187,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/interchange/source/rev/rev-text-parser.js",
+          "sha256": "d556c67650d540a49652fd576e46e22e9efa28b9a63e9192c2d8e42a9a690db4",
+          "bytes": 4872,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/interchange/source/rev/RevImportAdapter.js",
+          "sha256": "1a64ff9afbcd60ff911dad66d57fb43d39ec72038c2fa260768b4a990bd3fb44",
+          "bytes": 2444,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/interchange/source/json/json-topo-parser.js",
+          "sha256": "f5749a5561dbd8582860eac8dc2febb02b671e054781cabd02c8f604dfa064bd",
+          "bytes": 3749,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/interchange/source/json/GenericJsonImportAdapter.js",
+          "sha256": "41cef32ecb261ef7ec7877c734a2946049029d3b7b0ef25fc66f35c47e589e48",
+          "bytes": 2675,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/interchange/topo/template-evaluator.js",
+          "sha256": "b4378981092323fe4680ce74db26de83c65af62ca61d94ba38a110397e22c0cd",
+          "bytes": 2388,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/interchange/topo/topo-mapping-profiles.js",
+          "sha256": "d9c883f509c46c67fb4b4aff35af1c7b5e2f274a08c9ebe92bf752a0f5c70841",
+          "bytes": 2790,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/interchange/topo/topo-builder.js",
+          "sha256": "07d1efe71f728e0d6dfa0f36a5920c80964da0fe19d03d4f9584e15968250005",
+          "bytes": 17620,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/interchange/support/support-mapping-config.js",
+          "sha256": "5491c47cd5038b197a38ab5a89911933a2a5467037b01bf4f6c93d36fb7a67f1",
+          "bytes": 5133,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/interchange/support/support-mapping-store.js",
+          "sha256": "f493bd9ac23575b6aabe3dffad3f5498274334a841ffa262958dfdaae11053ef",
+          "bytes": 5101,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/interchange/support/support-builder.js",
+          "sha256": "9ad4d76c98d73dedcfcc2c93cf651ce2cfe06b8b3f3d80195979721f8ba4e139",
+          "bytes": 7961,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/interchange/view/Modelexh_PreviewRenderer.js",
+          "sha256": "dd276b1e4d82221b4a592ce6c59230daf5e00d4b4dec613febe2b523b6cb94b8",
+          "bytes": 6529,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/tabs/support-mapping-config-tab.js",
+          "sha256": "454cd8128f0240d018040862db9ce337197d724643cd98576d213fa48f990103",
+          "bytes": 11052,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/tabs/support-mapping-config-tab.css",
+          "sha256": "1d1bb5b674662b5bd46a9d4b3c39359b9dc8b58da43735030964bd04dcfb6508",
+          "bytes": 2185,
+          "strategy": "patch_then_overlay"
+        }
+      ]
+    },
+    {
+      "id": "rvm-attribute-xml-compat",
+      "title": "RVM+ATTRIBUTE XML-only Script + Legacy Shim",
+      "patchFile": "patches/02_rvm_attribute_xml_compat.patch",
+      "dependsOn": [
+        "topo-support-model-exchange"
+      ],
+      "files": [
+        {
+          "path": "viewer/converters/py-worker.js",
+          "sha256": "745ff29c1bd82a21bb0ac0cf9265b854c42a7135c2f36765794bb43abf769f22",
+          "bytes": 10889,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/converters/scripts/rvm_attribute_to_xml.py",
+          "sha256": "902a81363cefac1715707ac78fbb12ad0f7a0106bc7014b10ff89500d28f29fa",
+          "bytes": 13912,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/converters/scripts/rvm_attribute_to_xml_to_cii.py",
+          "sha256": "ffaefcbf08e12f2e97db7e35dee9d26f96f275c573e383d5b6776a126267bd56",
+          "bytes": 4338,
+          "strategy": "patch_then_overlay"
+        }
+      ]
+    },
+    {
+      "id": "tests",
+      "title": "Adapter/Support/UI Test Updates",
+      "patchFile": "patches/03_tests.patch",
+      "dependsOn": [
+        "topo-support-model-exchange"
+      ],
+      "files": [
+        {
+          "path": "viewer/tests/unit/interchange/adapter-registry.test.js",
+          "sha256": "36c5974e8ecd848aad87a1da85b50134979b7d1ff4ad4671a198e0580a5a0a04",
+          "bytes": 2665,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/tests/unit/interchange/support-mapping-config.test.js",
+          "sha256": "29884a7a20089e5834aecded36c21b9d9947b20a36eb223b8c212af0f883de94",
+          "bytes": 1404,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/tests/integration/model-exchange-ui.test.js",
+          "sha256": "10f54df44e837248c7d9f826a1f8246f81f485fe28a293cb8f88bd979c2c78f6",
+          "bytes": 1539,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/tests/run-interface-tests.mjs",
+          "sha256": "91c3dd97ab7b10423a7a6ad7f1396c4e61ac55e7e7953a22beab3eac01df65f8",
+          "bytes": 1976,
+          "strategy": "patch_then_overlay"
+        }
+      ]
+    },
+    {
+      "id": "model-converters-3d-preview",
+      "title": "3DModelConv Canvas Preview in 3D Model Converters",
+      "patchFile": "patches/04_model_converters_3d_preview.patch",
+      "dependsOn": [
+        "topo-support-model-exchange"
+      ],
+      "files": [
+        {
+          "path": "viewer/tabs/model-converters-tab.js",
+          "sha256": "cf89904e1d61d80c5e3ef0c5903fd629d6e70a83592959be5d27da109109fa60",
+          "bytes": 40766,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/tabs/model-converters-tab.css",
+          "sha256": "e283fdfb5867acd117515986758832a7a3c15338413e3102beb8c709210b3877",
+          "bytes": 3180,
+          "strategy": "patch_then_overlay"
+        },
+        {
+          "path": "viewer/converters/view/3DModelConv_PreviewRenderer.js",
+          "sha256": "1721ba37035d809bb4f4856a294f88552614cfc995250c1731f6d08f9b5503c0",
+          "bytes": 8053,
+          "strategy": "patch_then_overlay"
+        }
+      ]
+    }
+  ],
+  "overlayFiles": [
+    {
+      "path": "viewer/contracts/runtime-events.js",
+      "sha256": "e43e5cafa4ccce5785dfbc74bf65cac3979b55173b95e97de8f466eb03c3fb9a",
+      "bytes": 2086,
+      "strategy": "overlay_only"
+    }
+  ],
+  "validation": {
+    "commands": [
+      "node --check viewer/core/app.js",
+      "node --check viewer/tabs/model-exchange-tab.js",
+      "node --check viewer/tabs/support-mapping-config-tab.js",
+      "python -m py_compile viewer/converters/scripts/rvm_attribute_to_xml.py viewer/converters/scripts/rvm_attribute_to_xml_to_cii.py",
+      "node viewer/tests/unit/interchange/adapter-registry.test.js",
+      "node viewer/tests/unit/interchange/support-mapping-config.test.js",
+      "node viewer/tests/integration/model-exchange-ui.test.js"
+    ],
+    "notes": [
+      "Full interface suite may fail in pure Node due import-map dependency on three; use browser/runtime environment for end-to-end coverage."
+    ]
+  }
+}

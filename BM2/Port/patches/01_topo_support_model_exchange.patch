@@ -1,0 +1,5744 @@
+diff --git a/viewer/core/app.js b/viewer/core/app.js
+index 1111111..2222222 100644
+--- a/viewer/core/app.js
++++ b/viewer/core/app.js
+@@ -1,4 +1,4 @@
+-import { loadStickyState, state, setActiveTab } from './state.js';
+
++﻿import { loadStickyState, state, setActiveTab } from './state.js';
+
+ import { RuntimeEvents } from '../contracts/runtime-events.js';
+
+ import { renderViewer3D } from '../tabs/viewer3d-tab.js';
+
+ import { renderViewer3DRvm } from '../tabs/viewer3d-rvm-tab.js';
+
+@@ -6,6 +6,7 @@
+ import { renderPcfxConverterTab } from '../tabs/pcfx-converter-tab.js';
+
+ import { renderModelExchangeTab } from '../tabs/model-exchange-tab.js';
+
+ import { renderInterchangeConfigTab } from '../tabs/interchange-config-tab.js';
+
++import { renderSupportMappingConfigTab } from '../tabs/support-mapping-config-tab.js';
+
+ import { renderModelConvertersTab } from '../tabs/model-converters-tab.js';
+
+ import { emit, on } from './event-bus.js';
+
+ import { initDevDebugWindow, destroyDevDebugWindow } from '../debug/dev-debug-window.js';
+
+@@ -25,6 +26,7 @@
+   { id: 'pcfx-converter', label: 'PCF<->PCFX<->GLB', render: renderPcfxConverterTab },
+
+   { id: 'model-exchange', label: 'Model Exchange', render: renderModelExchangeTab },
+
+   { id: 'interchange-config', label: 'Interchange Config', render: renderInterchangeConfigTab },
+
++  { id: 'support-mapping-config', label: 'Support Mapping Config', render: renderSupportMappingConfigTab },
+
+   { id: 'model-converters', label: '3D Model Converters', render: renderModelConvertersTab },
+
+ ];
+
+ 
+
+@@ -165,3 +167,4 @@
+   const match = _visibleTabs.find((tab) => tab.id === requested);
+
+   return match?.id || _visibleTabs[0]?.id || 'viewer3d';
+
+ }
+
++
+
+
+diff --git a/opt/tab-visibility.json b/opt/tab-visibility.json
+index 1111111..2222222 100644
+--- a/opt/tab-visibility.json
++++ b/opt/tab-visibility.json
+@@ -1,9 +1,10 @@
+-{
+
+-  "geometry": 1,
+
+-  "viewer3d": 1,
+
+-  "adv-glb": 1,
+
+-  "pcfx-converter": 1,
+
+-  "model-exchange": 1,
+
+-  "interchange-config": 1,
+
+-  "model-converters": 1
+
++﻿{
+
++    "geometry":  1,
+
++    "viewer3d":  1,
+
++    "adv-glb":  1,
+
++    "pcfx-converter":  1,
+
++    "model-exchange":  1,
+
++    "interchange-config":  1,
+
++    "model-converters":  1,
+
++    "support-mapping-config":  1
+
+ }
+
+
+diff --git a/viewer/opt/tab-visibility.json b/viewer/opt/tab-visibility.json
+index 1111111..2222222 100644
+--- a/viewer/opt/tab-visibility.json
++++ b/viewer/opt/tab-visibility.json
+@@ -1,10 +1,11 @@
+-{
+
+-  "geometry": 1,
+
+-  "viewer3d": 1,
+
+-  "viewer3d-rvm": 1,
+
+-  "adv-glb": 1,
+
+-  "pcfx-converter": 1,
+
+-  "model-exchange": 1,
+
+-  "interchange-config": 1,
+
+-  "model-converters": 1
+
++﻿{
+
++    "geometry":  1,
+
++    "viewer3d":  1,
+
++    "viewer3d-rvm":  1,
+
++    "adv-glb":  1,
+
++    "pcfx-converter":  1,
+
++    "model-exchange":  1,
+
++    "interchange-config":  1,
+
++    "model-converters":  1,
+
++    "support-mapping-config":  1
+
+ }
+
+
+diff --git a/viewer/interchange/source/adapter-registry.js b/viewer/interchange/source/adapter-registry.js
+index 1111111..2222222 100644
+--- a/viewer/interchange/source/adapter-registry.js
++++ b/viewer/interchange/source/adapter-registry.js
+@@ -1,7 +1,9 @@
+-import { CaesarXmlImportAdapter } from './xml/CaesarXmlImportAdapter.js';
+
++﻿import { CaesarXmlImportAdapter } from './xml/CaesarXmlImportAdapter.js';
+
+ import { NeutralXmlImportAdapter } from './xml/NeutralXmlImportAdapter.js';
+
++import { RevImportAdapter } from './rev/RevImportAdapter.js';
+
+ import { PcfImportAdapter } from './pcf/PcfImportAdapter.js';
+
+ import { PcfxImportAdapter } from './pcfx/PcfxImportAdapter.js';
+
++import { GenericJsonImportAdapter } from './json/GenericJsonImportAdapter.js';
+
+ import { GlbImportAdapter } from './glb/GlbImportAdapter.js';
+
+ import { CaesarAccdbImportAdapter } from './accdb/CaesarAccdbImportAdapter.js';
+
+ import { CaesarPdfImportAdapter } from './pdf/CaesarPdfImportAdapter.js';
+
+@@ -9,8 +11,10 @@
+ const ADAPTERS = [
+
+   CaesarXmlImportAdapter,
+
+   NeutralXmlImportAdapter,
+
++  RevImportAdapter,
+
+   PcfImportAdapter,
+
+   PcfxImportAdapter,
+
++  GenericJsonImportAdapter,
+
+   GlbImportAdapter,
+
+   CaesarAccdbImportAdapter,
+
+   CaesarPdfImportAdapter,
+
+
+diff --git a/viewer/interchange/source/xml/CaesarXmlImportAdapter.js b/viewer/interchange/source/xml/CaesarXmlImportAdapter.js
+index 1111111..2222222 100644
+--- a/viewer/interchange/source/xml/CaesarXmlImportAdapter.js
++++ b/viewer/interchange/source/xml/CaesarXmlImportAdapter.js
+@@ -1,6 +1,7 @@
+-import { SourceFileRecord } from '../SourceFileRecord.js';
+
++﻿import { SourceFileRecord } from '../SourceFileRecord.js';
+
+ import { SourceDialectInfo } from '../SourceDialectInfo.js';
+
+-import { buildXmlCanonicalProject } from '../../builders/xml/xml-graph-builder.js';
+
++import { buildCanonicalProjectFromTopoSource } from '../../topo/topo-builder.js';
+
++import { cloneDefaultTopoProfile } from '../../topo/topo-mapping-profiles.js';
+
+ 
+
+ function attrNum(node, key, fallback = null) {
+
+   if (!node || !node.getAttribute) return fallback;
+
+@@ -9,112 +10,195 @@
+   return Number.isFinite(n) ? n : fallback;
+
+ }
+
+ 
+
+-function parseCaesarXml(xmlText) {
+
++function parseCaesarXmlToTopoInput(xmlText) {
+
+   const parser = new DOMParser();
+
+   const doc = parser.parseFromString(xmlText, 'application/xml');
+
+   const model = doc.querySelector('PIPINGMODEL');
+
+-  const elements = [];
+
+-  const restraints = [];
+
+-  const bends = [];
+
+-
+
+-  const elementNodes = [...doc.querySelectorAll('PIPINGELEMENT')];
+
+-  elementNodes.forEach((elNode, index) => {
+
+-    const el = {
+
+-      index,
+
+-      from: Number(elNode.getAttribute('FROM_NODE')),
+
+-      to: Number(elNode.getAttribute('TO_NODE')),
+
+-      dx: attrNum(elNode, 'DELTA_X', 0),
+
+-      dy: attrNum(elNode, 'DELTA_Y', 0),
+
+-      dz: attrNum(elNode, 'DELTA_Z', 0),
+
+-      od: attrNum(elNode, 'OD', null),
+
+-      wall: attrNum(elNode, 'WALL_THICKNESS', null),
+
+-      material: elNode.getAttribute('MATNAME') || '',
+
+-      name: elNode.getAttribute('NAME') || '',
+
+-      lineNo: elNode.getAttribute('LINE_NO') || elNode.getAttribute('LINE-NO') || '',
+
++  const segments = [];
+
++  const supports = [];
+
++  const messages = [];
+
++
+
++  const byNearNode = new Map();
+
++  [...doc.querySelectorAll('BEND')].forEach((bNode) => {
+
++    const nearNode = String(bNode.getAttribute('NEAR_NODE') || bNode.getAttribute('NODE') || '').trim();
+
++    if (!nearNode) return;
+
++    byNearNode.set(nearNode, {
+
++      radius: attrNum(bNode, 'RADIUS', null),
+
++    });
+
++  });
+
++
+
++  [...doc.querySelectorAll('PIPINGELEMENT')].forEach((elNode, index) => {
+
++    const fromRef = String(elNode.getAttribute('FROM_NODE') || '').trim();
+
++    const toRef = String(elNode.getAttribute('TO_NODE') || '').trim();
+
++    if (!fromRef || !toRef) {
+
++      messages.push({ level: 'WARN', message: `PIPINGELEMENT index ${index} skipped (missing FROM_NODE/TO_NODE).` });
+
++      return;
+
++    }
+
++
+
++    const dx = attrNum(elNode, 'DELTA_X', 0);
+
++    const dy = attrNum(elNode, 'DELTA_Y', 0);
+
++    const dz = attrNum(elNode, 'DELTA_Z', 0);
+
++    const od = attrNum(elNode, 'OD', null);
+
++    const wall = attrNum(elNode, 'WALL_THICKNESS', null);
+
++    const lineNo = elNode.getAttribute('LINE_NO') || elNode.getAttribute('LINE-NO') || '';
+
++
+
++    const bend = byNearNode.get(fromRef) || byNearNode.get(toRef) || null;
+
++    const type = bend ? 'BEND' : 'PIPE';
+
++
+
++    const rawAttributes = {
+
++      INDEX: index,
+
++      FROM_NODE: fromRef,
+
++      TO_NODE: toRef,
+
++      DELTA_X: dx,
+
++      DELTA_Y: dy,
+
++      DELTA_Z: dz,
+
++      OD: od,
+
++      WALL_THICKNESS: wall,
+
++      LINE_NO: lineNo,
+
++      SKEY: type,
+
++      MATERIAL: elNode.getAttribute('MATNAME') || '',
+
++      NAME: elNode.getAttribute('NAME') || '',
+
+       P1: attrNum(elNode, 'P1', null),
+
+       T1: attrNum(elNode, 'T1', null),
+
+-      corrosion: attrNum(elNode, 'CORR_THK', null),
+
+-      hasBend: false,
+
+-      bend: null,
+
++      CORR_THK: attrNum(elNode, 'CORR_THK', null),
+
++      BEND_RADIUS: bend?.radius ?? null,
+
+     };
+
+-    elements.push(el);
+
++
+
++    segments.push({
+
++      id: `XML-ELEMENT-${index + 1}`,
+
++      type,
+
++      fromRef,
+
++      toRef,
+
++      dx,
+
++      dy,
+
++      dz,
+
++      ep1: null,
+
++      ep2: null,
+
++      cp: null,
+
++      bp: null,
+
++      supportCoord: null,
+
++      rawAttributes,
+
++      sourceRefs: [{ format: 'XML', sourceId: `PIPINGELEMENT:${index + 1}` }],
+
++      path: lineNo || `XML-LINE-${index + 1}`,
+
++    });
+
+   });
+
+ 
+
+-  [...doc.querySelectorAll('BEND')].forEach((bNode) => {
+
+-    const nearNode = Number(bNode.getAttribute('NEAR_NODE') || bNode.getAttribute('NODE') || NaN);
+
+-    const radius = attrNum(bNode, 'RADIUS', null);
+
+-    let matched = -1;
+
+-    if (Number.isFinite(nearNode)) {
+
+-      matched = elements.findIndex((el) => Number(el.from) === nearNode || Number(el.to) === nearNode);
+
+-    }
+
+-    if (matched >= 0) {
+
+-      elements[matched].hasBend = true;
+
+-      elements[matched].bend = { nearNode, radius, centrePoint: null };
+
+-      bends.push({ elementIndex: matched, nearNode, radius });
+
+-    }
+
+-  });
+
+-
+
+-  [...doc.querySelectorAll('RESTRAINT')].forEach((rNode) => {
+
+-    restraints.push({
+
+-      node: Number(rNode.getAttribute('NODE')),
+
+-      rawType: rNode.getAttribute('TYPE') || rNode.getAttribute('RESTRAINT_TYPE') || '',
+
+-      supportBlock: rNode.getAttribute('SUPPORT_NAME') || '',
+
+-      supportDescription: rNode.getAttribute('DESC') || '',
+
+-      axisCosines: {
+
+-        x: attrNum(rNode, 'XCOSINE', 0),
+
+-        y: attrNum(rNode, 'YCOSINE', 0),
+
+-        z: attrNum(rNode, 'ZCOSINE', 0),
+
+-      },
+
+-      dofs: [],
+
++  [...doc.querySelectorAll('RESTRAINT')].forEach((rNode, index) => {
+
++    const nodeRef = String(rNode.getAttribute('NODE') || '').trim();
+
++    const rawType = String(rNode.getAttribute('TYPE') || rNode.getAttribute('RESTRAINT_TYPE') || '').trim();
+
++    const supportName = String(rNode.getAttribute('SUPPORT_NAME') || '').trim();
+
++    const lineNo = String(rNode.getAttribute('LINE_NO') || '').trim();
+
++    const x = attrNum(rNode, 'X', null);
+
++    const y = attrNum(rNode, 'Y', null);
+
++    const z = attrNum(rNode, 'Z', null);
+
++
+
++    supports.push({
+
++      id: `XML-SUPPORT-${index + 1}`,
+
++      type: 'SUPPORT',
+
++      fromRef: nodeRef,
+
++      toRef: '',
+
++      ep1: null,
+
++      ep2: null,
+
++      cp: null,
+
++      bp: null,
+
++      supportCoord: (x !== null && y !== null && z !== null) ? { x, y, z } : null,
+
++      rawAttributes: {
+
++        NODE: nodeRef,
+
++        TYPE: rawType,
+
++        SUPPORT_NAME: supportName,
+
++        LINE_NO: lineNo,
+
++        SKEY: supportName || rawType || 'SUPPORT',
+
++        SUPPORT_DIRECTION: rawType,
+
++        XCOSINE: attrNum(rNode, 'XCOSINE', 0),
+
++        YCOSINE: attrNum(rNode, 'YCOSINE', 0),
+
++        ZCOSINE: attrNum(rNode, 'ZCOSINE', 0),
+
++      },
+
++      sourceRefs: [{ format: 'XML', sourceId: `RESTRAINT:${index + 1}` }],
+
++      path: supportName || rawType || 'SUPPORT',
+
+     });
+
+   });
+
+ 
+
+   return {
+
+     format: 'XML',
+
+-    dialect: 'CAESAR_XML',
+
++    segments,
+
++    supports,
+
++    annotations: [],
+
++    messages,
+
+     meta: {
+
+       jobName: model?.getAttribute('JOBNAME') || '',
+
+       northX: attrNum(model, 'NORTH_X', null),
+
+       northY: attrNum(model, 'NORTH_Y', null),
+
+       northZ: attrNum(model, 'NORTH_Z', null),
+
+     },
+
+-    elements,
+
+-    bends,
+
+-    restraints,
+
+   };
+
+ }
+
+ 
+
+ export class CaesarXmlImportAdapter {
+
+-  static detect(xmlText) { return /<\s*PIPINGMODEL\b/i.test(xmlText || '') || /<\s*PIPINGELEMENT\b/i.test(xmlText || ''); }
+
++  static detect(xmlText) {
+
++    return /<\s*PIPINGMODEL\b/i.test(xmlText || '') || /<\s*PIPINGELEMENT\b/i.test(xmlText || '');
+
++  }
+
+ 
+
+   static detectConfidence(input) {
+
+     const text = input?.text || '';
+
+     const name = input?.name || '';
+
+     if (this.detect(text)) {
+
+-      return /\.xml$/i.test(name) ? 0.9 : 0.8;
+
++      return /\.xml$/i.test(name) ? 0.96 : 0.86;
+
+     }
+
+     return 0;
+
+   }
+
+ 
+
+   async import({ id = '', name = 'input.xml', text = '' } = {}) {
+
+-    const parsed = parseCaesarXml(text);
+
++    const parsedTopo = parseCaesarXmlToTopoInput(text);
+
+     const dialectInfo = new SourceDialectInfo({
+
+       format: 'XML',
+
+       dialect: 'CAESAR_XML',
+
+       units: 'SOURCE_DEFINED',
+
+       axisConvention: 'Y_UP',
+
+-      metadata: parsed.meta,
+
+-    });
+
++      metadata: parsedTopo.meta,
+
++    });
+
++
+
+     const sourceRecord = new SourceFileRecord({
+
+       id: id || `xml-${Date.now()}`,
+
+       name,
+
+       format: 'XML',
+
+       dialect: dialectInfo.dialect,
+
+       rawText: text,
+
+-      metadata: { ...parsed.meta, dialectInfo },
+
+-    });
+
+-    sourceRecord.addMessage('INFO', 'CAESAR XML parsed.', { elements: parsed.elements.length, restraints: parsed.restraints.length });
+
+-    const project = buildXmlCanonicalProject({ sourceRecord, parsed });
+
+-    return { sourceRecord, parsed, project };
+
++      metadata: { ...parsedTopo.meta, dialectInfo },
+
++    });
+
++
+
++    for (const msg of parsedTopo.messages || []) {
+
++      sourceRecord.addMessage(msg.level || 'INFO', msg.message || '', msg.details || {});
+
++    }
+
++
+
++    const { project, topoGraph, supportSpecs } = buildCanonicalProjectFromTopoSource({
+
++      sourceRecord,
+
++      topoInput: parsedTopo,
+
++      format: 'XML',
+
++      profileOverride: cloneDefaultTopoProfile('XML'),
+
++    });
+
++
+
++    sourceRecord.addMessage('INFO', 'CAESAR XML source mapped through Topo Builder.', {
+
++      elements: parsedTopo.segments.length,
+
++      supports: parsedTopo.supports.length,
+
++      topo: {
+
++        nodes: topoGraph.nodes.length,
+
++        segments: topoGraph.segments.length,
+
++      },
+
++      supportSpecs: supportSpecs.length,
+
++    });
+
++
+
++    return {
+
++      sourceRecord,
+
++      parsed: {
+
++        topoInput: parsedTopo,
+
++        topoGraph,
+
++        supportSpecs,
+
++      },
+
++      project,
+
++      diagnostics: {
+
++        source: sourceRecord.messages,
+
++        canonical: project?.diagnostics?.messages || [],
+
++      },
+
++    };
+
+   }
+
+ }
+
+
+diff --git a/viewer/tabs/model-exchange-tab.js b/viewer/tabs/model-exchange-tab.js
+index 1111111..2222222 100644
+--- a/viewer/tabs/model-exchange-tab.js
++++ b/viewer/tabs/model-exchange-tab.js
+@@ -1,4 +1,4 @@
+-import { notify } from '../diagnostics/notification-center.js';
+
++﻿import { notify } from '../diagnostics/notification-center.js';
+
+ import { createModelExchangeStore } from '../interchange/state/model-exchange-store.js';
+
+ import { importFileIntoModelExchange, exportFromModelExchange, updateViewState } from '../interchange/state/model-exchange-actions.js';
+
+ import { summarizeProjectFidelity } from '../interchange/validation/FidelityEvaluator.js';
+
+@@ -7,6 +7,8 @@
+ import { validateAnnotations } from '../interchange/validation/AnnotationValidator.js';
+
+ import { renderIcon } from '../interchange/view/interchange-icons.js';
+
+ import { getConversionConfig, subscribeConversionConfig } from '../interchange/config/conversion-config-store.js';
+
++import { getSupportMappingConfig, loadSupportMappingConfig, subscribeSupportMappingConfig } from '../interchange/support/support-mapping-store.js';
+
++import { ModelexhPreviewRenderer } from '../interchange/view/Modelexh_PreviewRenderer.js';
+
+ import { emit } from '../core/event-bus.js';
+
+ import { RuntimeEvents } from '../contracts/runtime-events.js';
+
+ 
+
+@@ -60,6 +62,7 @@
+   const source = store.sourcePreview;
+
+   const canonical = store.canonicalPreview;
+
+   const config = store.configSnapshot || getConversionConfig();
+
++  const supportConfig = getSupportMappingConfig();
+
+   return `
+
+     <div class="model-exchange-panel model-exchange-left">
+
+       <div class="model-exchange-section-title">Source Preview</div>
+
+@@ -89,6 +92,14 @@
+         strictMode: config.exportPolicy?.strictMode,
+
+         precedence: config.exportPolicy?.precedence,
+
+       }, null, 2))}</div>
+
++      <hr>
+
++      <div class="model-exchange-section-title">Support Mapping Summary</div>
+
++      <div class="model-exchange-code">${escapeHtml(JSON.stringify({
+
++        version: supportConfig?.version,
+
++        revRules: supportConfig?.formats?.REV?.rules?.length || 0,
+
++        jsonRules: supportConfig?.formats?.JSON?.rules?.length || 0,
+
++        xmlRules: supportConfig?.formats?.XML?.rules?.length || 0,
+
++      }, null, 2))}</div>
+
+     </div>
+
+   `;
+
+ }
+
+@@ -100,9 +111,9 @@
+   return `
+
+     <div class="model-exchange-panel model-exchange-center">
+
+       <div class="model-exchange-toolbar">
+
+-        <label class="model-exchange-button model-exchange-file-button" title="Import PCF, PCFX, XML, or GLB into the canonical model exchange surface">
+
++        <label class="model-exchange-button model-exchange-file-button" title="Import REV, JSON, PCF, PCFX, XML, or GLB into the canonical model exchange surface">
+
+           <span class="mx-icon">${renderIcon('import')}</span><span>Import</span>
+
+-          <input class="mx-hidden-input" type="file" data-action="import-file" accept=".pcf,.PCF,.xml,.XML,.json,.pcfx,.glb" />
+
++          <input class="mx-hidden-input" type="file" data-action="import-file" accept=".rev,.REV,.json,.JSON,.pcf,.PCF,.xml,.XML,.pcfx,.glb" />
+
+         </label>
+
+         <button class="model-exchange-button" data-action="preview-source"><span class="mx-icon">${renderIcon('source')}</span><span>Source Preview</span></button>
+
+         <button class="model-exchange-button" data-action="preview-canonical"><span class="mx-icon">${renderIcon('canonical')}</span><span>Canonical Preview</span></button>
+
+@@ -112,6 +123,7 @@
+         <button class="model-exchange-button" data-action="export-xml"><span class="mx-icon">${renderIcon('export')}</span><span>Export XML</span></button>
+
+         <button class="model-exchange-button" data-action="export-glb"><span class="mx-icon">${renderIcon('export')}</span><span>Export GLB</span></button>
+
+         <button class="model-exchange-button" data-action="open-config"><span class="mx-icon">${renderIcon('config')}</span><span>Config</span></button>
+
++        <button class="model-exchange-button" data-action="open-support-config"><span class="mx-icon">${renderIcon('config')}</span><span>Support Settings</span></button>
+
+         <select class="model-exchange-select" data-action="support-mode">
+
+           <option value="SYMBOL">Support: Symbol</option>
+
+           <option value="SIMPLIFIED_GEOMETRY">Support: Simplified Geometry</option>
+
+@@ -119,6 +131,12 @@
+         </select>
+
+         <button class="model-exchange-button" data-action="toggle-verification"><span class="mx-icon">${renderIcon('validate')}</span><span>Verify 100%</span></button>
+
+       </div>
+
++
+
++      <div class="model-exchange-section-title">Modelexh Geometry Preview</div>
+
++      <div class="model-exchange-canvas-wrap">
+
++        <div class="model-exchange-canvas-host" data-role="modelexh-preview"></div>
+
++      </div>
+
++
+
+       <div class="model-exchange-section-title">Rendered Inspector</div>
+
+       ${rendered ? `
+
+         <div class="mx-summary-grid">
+
+@@ -193,7 +211,7 @@
+   `;
+
+ }
+
+ 
+
+-function renderRoot(container) {
+
++function renderRoot(container, rendererRef) {
+
+   container.innerHTML = `
+
+     <div class="model-exchange-root">
+
+       ${renderLeftPanel()}
+
+@@ -237,16 +255,45 @@
+   }
+
+ 
+
+   container.querySelector('[data-action="open-config"]')?.addEventListener('click', () => triggerTabSwitch('interchange-config'));
+
++  container.querySelector('[data-action="open-support-config"]')?.addEventListener('click', () => triggerTabSwitch('support-mapping-config'));
+
++
+
++  const host = container.querySelector('[data-role="modelexh-preview"]');
+
++  if (rendererRef.current) {
+
++    try { rendererRef.current.destroy(); } catch {}
+
++    rendererRef.current = null;
+
++  }
+
++  if (host) {
+
++    try {
+
++      rendererRef.current = new ModelexhPreviewRenderer(host);
+
++      rendererRef.current.Modelexh_renderProject(store.project, store.viewState);
+
++    } catch (error) {
+
++      const message = escapeHtml(error?.message || String(error));
+
++      host.innerHTML = `<div class="model-exchange-canvas-fallback">Modelexh preview unavailable: ${message}</div>`;
+
++      notify({
+
++        level: 'warning',
+
++        title: 'Modelexh Preview',
+
++        message: `Modelexh renderer fallback: ${error?.message || error}`,
+
++        details: error,
+
++      });
+
++    }
+
++  }
+
+ }
+
+ 
+
+ export function createModelExchangeTab(container) {
+
+   ensureStylesheet();
+
+-  const unsubStore = store.subscribe(() => renderRoot(container));
+
++  const rendererRef = { current: null };
+
++
+
++  const unsubStore = store.subscribe(() => renderRoot(container, rendererRef));
+
+   const unsubConfig = subscribeConversionConfig(() => {
+
+     store.patch({ configSnapshot: getConversionConfig() });
+
+   });
+
++  const unsubSupport = subscribeSupportMappingConfig(() => {
+
++    store.patch({ configSnapshot: getConversionConfig() });
+
++  });
+
++
+
+   store.patch({ configSnapshot: getConversionConfig() });
+
+-  renderRoot(container);
+
++  renderRoot(container, rendererRef);
+
++
+
+   return {
+
+     async importSource(payload) {
+
+       try {
+
+@@ -262,6 +309,8 @@
+     destroy() {
+
+       try { unsubStore?.(); } catch {}
+
+       try { unsubConfig?.(); } catch {}
+
++      try { unsubSupport?.(); } catch {}
+
++      try { rendererRef.current?.destroy(); } catch {}
+
+     },
+
+   };
+
+ }
+
+@@ -270,3 +319,4 @@
+   const api = createModelExchangeTab(container);
+
+   return () => api.destroy?.();
+
+ }
+
++
+
+
+diff --git a/viewer/tabs/model-exchange-tab.css b/viewer/tabs/model-exchange-tab.css
+index 1111111..2222222 100644
+--- a/viewer/tabs/model-exchange-tab.css
++++ b/viewer/tabs/model-exchange-tab.css
+@@ -1,4 +1,4 @@
+-.model-exchange-root {
+
++﻿.model-exchange-root {
+
+   display: grid;
+
+   grid-template-columns: 300px minmax(0, 1fr) 340px;
+
+   grid-template-rows: 1fr 220px;
+
+@@ -101,3 +101,38 @@
+     grid-row: auto;
+
+   }
+
+ }
+
++
+
++.model-exchange-canvas-wrap {
+
++  width: 100%;
+
++  min-height: 300px;
+
++  border: 1px solid #243247;
+
++  border-radius: 10px;
+
++  background: radial-gradient(circle at top, rgba(49,81,123,0.2), rgba(10,18,30,0.9));
+
++  overflow: hidden;
+
++  margin-bottom: 12px;
+
++}
+
++.model-exchange-canvas-host {
+
++  width: 100%;
+
++  height: 340px;
+
++}
+
++.model-exchange-canvas-host canvas {
+
++  display: block;
+
++  width: 100% !important;
+
++  height: 100% !important;
+
++}
+
++
+
++.model-exchange-canvas-fallback {
+
++  display: flex;
+
++  align-items: center;
+
++  justify-content: center;
+
++  width: 100%;
+
++  height: 100%;
+
++  color: #ffb4a9;
+
++  background: linear-gradient(180deg, rgba(80, 20, 20, 0.2), rgba(20, 8, 8, 0.85));
+
++  border: 1px solid rgba(220, 120, 120, 0.4);
+
++  border-radius: 8px;
+
++  text-align: center;
+
++  font-size: 12px;
+
++  padding: 12px;
+
++  box-sizing: border-box;
+
++}
+
+
+diff --git a/viewer/interchange/source/rev/rev-text-parser.js b/viewer/interchange/source/rev/rev-text-parser.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/interchange/source/rev/rev-text-parser.js
++++ b/viewer/interchange/source/rev/rev-text-parser.js
+@@ -0,0 +1,178 @@
++﻿/**
+
++ * rev-text-parser.js
+
++ * Lightweight REV parser for Model Exchange topology preview.
+
++ *
+
++ * Parses chunk stream with focus on PRIM box-like geometry and group hierarchy.
+
++ */
+
++
+
++function toFiniteNumber(value, fallback = 0) {
+
++  const numeric = Number(value);
+
++  return Number.isFinite(numeric) ? numeric : fallback;
+
++}
+
++
+
++function parseNumbers(line, expectedCount) {
+
++  const values = String(line || '')
+
++    .trim()
+
++    .split(/\s+/)
+
++    .map((token) => Number(token))
+
++    .filter((n) => Number.isFinite(n));
+
++  if (values.length < expectedCount) {
+
++    throw new Error(`REV numeric row expected ${expectedCount} values, got ${values.length}.`);
+
++  }
+
++  return values.slice(0, expectedCount);
+
++}
+
++
+
++function transformPoint(matrix, point) {
+
++  const r0 = matrix[0];
+
++  const r1 = matrix[1];
+
++  const r2 = matrix[2];
+
++  return {
+
++    x: (r0[0] * point.x) + (r0[1] * point.y) + (r0[2] * point.z) + r0[3],
+
++    y: (r1[0] * point.x) + (r1[1] * point.y) + (r1[2] * point.z) + r1[3],
+
++    z: (r2[0] * point.x) + (r2[1] * point.y) + (r2[2] * point.z) + r2[3],
+
++  };
+
++}
+
++
+
++function choosePrimaryAxis(dimensions) {
+
++  const axes = [0, 1, 2];
+
++  axes.sort((a, b) => dimensions[b] - dimensions[a]);
+
++  return axes[0];
+
++}
+
++
+
++function endpointsFromBox(matrix, bboxMin, bboxMax) {
+
++  const cx = (bboxMin[0] + bboxMax[0]) / 2;
+
++  const cy = (bboxMin[1] + bboxMax[1]) / 2;
+
++  const cz = (bboxMin[2] + bboxMax[2]) / 2;
+
++  const dims = [
+
++    Math.abs(bboxMax[0] - bboxMin[0]),
+
++    Math.abs(bboxMax[1] - bboxMin[1]),
+
++    Math.abs(bboxMax[2] - bboxMin[2]),
+
++  ];
+
++  const primaryAxis = choosePrimaryAxis(dims);
+
++
+
++  const pA = { x: cx, y: cy, z: cz };
+
++  const pB = { x: cx, y: cy, z: cz };
+
++
+
++  if (primaryAxis === 0) {
+
++    pA.x = bboxMin[0];
+
++    pB.x = bboxMax[0];
+
++  } else if (primaryAxis === 1) {
+
++    pA.y = bboxMin[1];
+
++    pB.y = bboxMax[1];
+
++  } else {
+
++    pA.z = bboxMin[2];
+
++    pB.z = bboxMax[2];
+
++  }
+
++
+
++  return {
+
++    ep1: transformPoint(matrix, pA),
+
++    ep2: transformPoint(matrix, pB),
+
++    dims,
+
++    primaryAxis,
+
++    center: transformPoint(matrix, { x: cx, y: cy, z: cz }),
+
++  };
+
++}
+
++
+
++function isChunkToken(token) {
+
++  return /^(HEAD|MODL|CNTB|CNTE|PRIM|OBST|INSU|END:)/.test(String(token || '').trim());
+
++}
+
++
+
++export function parseRevToTopoInput(revText) {
+
++  const lines = String(revText || '')
+
++    .replace(/\r\n/g, '\n')
+
++    .replace(/\r/g, '\n')
+
++    .split('\n');
+
++
+
++  const segments = [];
+
++  const supports = [];
+
++  const messages = [];
+
++  const groupStack = [];
+
++
+
++  let idx = 0;
+
++  while (idx < lines.length) {
+
++    const chunk = String(lines[idx] || '').trim();
+
++    idx += 1;
+
++    if (!chunk) continue;
+
++
+
++    if (chunk === 'HEAD') {
+
++      idx += 4;
+
++      continue;
+
++    }
+
++    if (chunk === 'MODL') {
+
++      idx += 1;
+
++      continue;
+
++    }
+
++    if (chunk === 'CNTB') {
+
++      const group = String(lines[idx] || '').trim();
+
++      idx += 1;
+
++      groupStack.push(group);
+
++      continue;
+
++    }
+
++    if (chunk === 'CNTE') {
+
++      idx += 1;
+
++      if (groupStack.length) groupStack.pop();
+
++      continue;
+
++    }
+
++
+
++    if (chunk === 'PRIM' || chunk === 'OBST' || chunk === 'INSU') {
+
++      try {
+
++        const kind = String(lines[idx] || '').trim();
+
++        idx += 1;
+
++
+
++        const r0 = parseNumbers(lines[idx], 4); idx += 1;
+
++        const r1 = parseNumbers(lines[idx], 4); idx += 1;
+
++        const r2 = parseNumbers(lines[idx], 4); idx += 1;
+
++        const bboxMin = parseNumbers(lines[idx], 3); idx += 1;
+
++        const bboxMax = parseNumbers(lines[idx], 3); idx += 1;
+
++
+
++        // Skip payload/facets until next chunk token.
+
++        while (idx < lines.length && !isChunkToken(lines[idx])) idx += 1;
+
++
+
++        const matrix = [r0, r1, r2];
+
++        const geom = endpointsFromBox(matrix, bboxMin, bboxMax);
+
++        const groupPath = groupStack.join('/');
+
++        const isSupport = /PIPESUPP|SUPPORT/i.test(groupPath);
+
++
+
++        const rawAttributes = {
+
++          chunk,
+
++          kind,
+
++          groupPath,
+
++          DIM_X: toFiniteNumber(geom.dims[0]),
+
++          DIM_Y: toFiniteNumber(geom.dims[1]),
+
++          DIM_Z: toFiniteNumber(geom.dims[2]),
+
++          SKEY: isSupport ? 'SUPPORT' : 'PIPE',
+
++          ITEM_CODE: kind,
+
++        };
+
++
+
++        const item = {
+
++          id: `REV-${segments.length + supports.length + 1}`,
+
++          type: isSupport ? 'SUPPORT' : 'PIPE',
+
++          ep1: geom.ep1,
+
++          ep2: geom.ep2,
+
++          cp: null,
+
++          bp: null,
+
++          supportCoord: geom.center,
+
++          rawAttributes,
+
++          sourceRefs: [{ format: 'REV', sourceId: `PRIM:${segments.length + supports.length + 1}` }],
+
++          path: groupPath,
+
++        };
+
++
+
++        if (isSupport) supports.push(item);
+
++        else segments.push(item);
+
++      } catch (error) {
+
++        messages.push({ level: 'WARN', message: `REV primitive parse warning at line ${idx}: ${error.message}` });
+
++      }
+
++      continue;
+
++    }
+
++
+
++    if (chunk.startsWith('END:')) break;
+
++  }
+
++
+
++  return {
+
++    format: 'REV',
+
++    segments,
+
++    supports,
+
++    annotations: [],
+
++    messages,
+
++  };
+
++}
+
+
+diff --git a/viewer/interchange/source/rev/RevImportAdapter.js b/viewer/interchange/source/rev/RevImportAdapter.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/interchange/source/rev/RevImportAdapter.js
++++ b/viewer/interchange/source/rev/RevImportAdapter.js
+@@ -0,0 +1,81 @@
++﻿import { SourceFileRecord } from '../SourceFileRecord.js';
+
++import { SourceDialectInfo } from '../SourceDialectInfo.js';
+
++import { parseRevToTopoInput } from './rev-text-parser.js';
+
++import { buildCanonicalProjectFromTopoSource } from '../../topo/topo-builder.js';
+
++import { cloneDefaultTopoProfile } from '../../topo/topo-mapping-profiles.js';
+
++
+
++export class RevImportAdapter {
+
++  static detect(text) {
+
++    const source = String(text || '');
+
++    return /\bHEAD\b/.test(source)
+
++      && /\bMODL\b/.test(source)
+
++      && /\b(PRIM|OBST|INSU)\b/.test(source);
+
++  }
+
++
+
++  static detectConfidence(input) {
+
++    const text = String(input?.text || '');
+
++    const name = String(input?.name || '');
+
++    const byText = this.detect(text);
+
++    if (byText && /\.rev$/i.test(name)) return 1.0;
+
++    if (byText) return 0.92;
+
++    if (/\.rev$/i.test(name)) return 0.55;
+
++    return 0;
+
++  }
+
++
+
++  async import({ id = '', name = 'input.rev', text = '' } = {}) {
+
++    const parsedTopo = parseRevToTopoInput(text);
+
++    const dialectInfo = new SourceDialectInfo({
+
++      format: 'REV',
+
++      dialect: 'RVM_REV_TEXT',
+
++      units: 'SOURCE_DEFINED',
+
++      axisConvention: 'SOURCE_DEFINED',
+
++      metadata: {
+
++        segmentCount: parsedTopo.segments.length,
+
++        supportCount: parsedTopo.supports.length,
+
++      },
+
++    });
+
++
+
++    const sourceRecord = new SourceFileRecord({
+
++      id: id || `rev-${Date.now()}`,
+
++      name,
+
++      format: 'REV',
+
++      dialect: dialectInfo.dialect,
+
++      rawText: text,
+
++      metadata: { dialectInfo },
+
++    });
+
++
+
++    for (const msg of parsedTopo.messages || []) {
+
++      sourceRecord.addMessage(msg.level || 'INFO', msg.message || '', msg.details || {});
+
++    }
+
++
+
++    const { project, topoGraph, supportSpecs } = buildCanonicalProjectFromTopoSource({
+
++      sourceRecord,
+
++      topoInput: parsedTopo,
+
++      format: 'REV',
+
++      profileOverride: cloneDefaultTopoProfile('REV'),
+
++    });
+
++
+
++    sourceRecord.addMessage('INFO', 'REV source mapped through Topo Builder.', {
+
++      topo: {
+
++        nodes: topoGraph.nodes.length,
+
++        segments: topoGraph.segments.length,
+
++        components: topoGraph.components.length,
+
++      },
+
++      supportSpecs: supportSpecs.length,
+
++    });
+
++
+
++    return {
+
++      sourceRecord,
+
++      parsed: {
+
++        topoInput: parsedTopo,
+
++        topoGraph,
+
++        supportSpecs,
+
++      },
+
++      project,
+
++      diagnostics: {
+
++        source: sourceRecord.messages,
+
++        canonical: project?.diagnostics?.messages || [],
+
++      },
+
++    };
+
++  }
+
++}
+
+
+diff --git a/viewer/interchange/source/json/json-topo-parser.js b/viewer/interchange/source/json/json-topo-parser.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/interchange/source/json/json-topo-parser.js
++++ b/viewer/interchange/source/json/json-topo-parser.js
+@@ -0,0 +1,118 @@
++﻿/**
+
++ * json-topo-parser.js
+
++ * Generic JSON geometry extraction for Topo Builder.
+
++ */
+
++
+
++function toFiniteNumber(value) {
+
++  const numeric = Number(value);
+
++  return Number.isFinite(numeric) ? numeric : null;
+
++}
+
++
+
++function toPoint(candidate) {
+
++  if (!candidate || typeof candidate !== 'object') return null;
+
++  const x = toFiniteNumber(candidate.x ?? candidate.X ?? candidate[0]);
+
++  const y = toFiniteNumber(candidate.y ?? candidate.Y ?? candidate[1]);
+
++  const z = toFiniteNumber(candidate.z ?? candidate.Z ?? candidate[2]);
+
++  if (x === null || y === null || z === null) return null;
+
++  return { x, y, z };
+
++}
+
++
+
++function pointFromBBox(obj, pickMax) {
+
++  const bbox = obj?.bbox || obj?.boundingBox || obj?.bounds || null;
+
++  if (!bbox || typeof bbox !== 'object') return null;
+
++  const min = toPoint(bbox.min || bbox.minPoint || bbox.minimum || bbox.low);
+
++  const max = toPoint(bbox.max || bbox.maxPoint || bbox.maximum || bbox.high);
+
++  if (!min || !max) return null;
+
++  if (pickMax) return max;
+
++  return min;
+
++}
+
++
+
++function isLikelySupport(raw, pathText) {
+
++  const text = `${raw?.type || ''} ${raw?.name || ''} ${raw?.sKey || ''} ${raw?.SKEY || ''} ${pathText || ''}`;
+
++  return /support|clamp|hanger|pipesupp/i.test(text);
+
++}
+
++
+
++function extractSegmentFromObject(obj, pathText, index) {
+
++  const ep1 = toPoint(obj?.ep1)
+
++    || toPoint(obj?.start)
+
++    || toPoint(obj?.from)
+
++    || toPoint(obj?.p1)
+
++    || (Array.isArray(obj?.points) ? toPoint(obj.points[0]) : null)
+
++    || pointFromBBox(obj, false);
+
++
+
++  const ep2 = toPoint(obj?.ep2)
+
++    || toPoint(obj?.end)
+
++    || toPoint(obj?.to)
+
++    || toPoint(obj?.p2)
+
++    || (Array.isArray(obj?.points) && obj.points.length > 1 ? toPoint(obj.points[1]) : null)
+
++    || pointFromBBox(obj, true);
+
++
+
++  if (!ep1 || !ep2) return null;
+
++
+
++  const cp = toPoint(obj?.cp || obj?.center || obj?.centre || obj?.controlPoint);
+
++  const bp = toPoint(obj?.bp || obj?.branch || obj?.branchPoint);
+
++  const supportCoord = toPoint(obj?.supportCoord || obj?.coOrds || obj?.coord || obj?.position || obj?.origin);
+
++
+
++  const raw = {
+
++    ...obj,
+
++    LINE_NO: obj?.lineNo || obj?.LINE_NO || obj?.line || '',
+
++    SKEY: obj?.sKey || obj?.SKEY || obj?.type || 'PIPE',
+
++  };
+
++
+
++  const typeText = String(obj?.type || obj?.kind || obj?.componentType || 'PIPE').toUpperCase();
+
++  const support = isLikelySupport(raw, pathText) || typeText === 'SUPPORT';
+
++
+
++  return {
+
++    id: String(obj?.id || obj?.name || `JSON-${index + 1}`),
+
++    type: support ? 'SUPPORT' : typeText,
+
++    ep1,
+
++    ep2,
+
++    cp,
+
++    bp,
+
++    supportCoord,
+
++    rawAttributes: raw,
+
++    sourceRefs: [{ format: 'JSON', sourceId: pathText || `PATH:${index + 1}` }],
+
++    path: pathText,
+
++  };
+
++}
+
++
+
++function walk(value, pathText, visitor) {
+
++  if (Array.isArray(value)) {
+
++    value.forEach((item, idx) => walk(item, `${pathText}[${idx}]`, visitor));
+
++    return;
+
++  }
+
++  if (!value || typeof value !== 'object') return;
+
++  visitor(value, pathText);
+
++  for (const [key, child] of Object.entries(value)) {
+
++    walk(child, pathText ? `${pathText}.${key}` : key, visitor);
+
++  }
+
++}
+
++
+
++export function parseJsonToTopoInput(jsonText) {
+
++  const payload = JSON.parse(String(jsonText || '{}'));
+
++  const segments = [];
+
++  const supports = [];
+
++  const messages = [];
+
++
+
++  let index = 0;
+
++  walk(payload, '', (obj, pathText) => {
+
++    const parsed = extractSegmentFromObject(obj, pathText, index);
+
++    index += 1;
+
++    if (!parsed) return;
+
++    if (parsed.type === 'SUPPORT') supports.push(parsed);
+
++    else segments.push(parsed);
+
++  });
+
++
+
++  if (!segments.length && !supports.length) {
+
++    messages.push({ level: 'WARN', message: 'JSON import found no endpoint pairs; check mapping templates or source structure.' });
+
++  }
+
++
+
++  return {
+
++    format: 'JSON',
+
++    segments,
+
++    supports,
+
++    annotations: [],
+
++    messages,
+
++    rawJson: payload,
+
++  };
+
++}
+
+
+diff --git a/viewer/interchange/source/json/GenericJsonImportAdapter.js b/viewer/interchange/source/json/GenericJsonImportAdapter.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/interchange/source/json/GenericJsonImportAdapter.js
++++ b/viewer/interchange/source/json/GenericJsonImportAdapter.js
+@@ -0,0 +1,88 @@
++﻿import { SourceFileRecord } from '../SourceFileRecord.js';
+
++import { SourceDialectInfo } from '../SourceDialectInfo.js';
+
++import { parseJsonToTopoInput } from './json-topo-parser.js';
+
++import { buildCanonicalProjectFromTopoSource } from '../../topo/topo-builder.js';
+
++import { cloneDefaultTopoProfile } from '../../topo/topo-mapping-profiles.js';
+
++
+
++export class GenericJsonImportAdapter {
+
++  static detect(text) {
+
++    const source = String(text || '').trim();
+
++    if (!source) return false;
+
++    if (!(source.startsWith('{') || source.startsWith('['))) return false;
+
++    try {
+
++      JSON.parse(source);
+
++      return true;
+
++    } catch {
+
++      return false;
+
++    }
+
++  }
+
++
+
++  static detectConfidence(input) {
+
++    const text = String(input?.text || '');
+
++    const name = String(input?.name || '');
+
++    const byText = this.detect(text);
+
++    const isLikelyPcfx = /"pcfx"|"canonical"|"assemblies"/i.test(text);
+
++    if (isLikelyPcfx) return 0;
+
++    if (byText && /\.json$/i.test(name)) return 0.88;
+
++    if (byText) return 0.75;
+
++    return 0;
+
++  }
+
++
+
++  async import({ id = '', name = 'input.json', text = '' } = {}) {
+
++    const parsedTopo = parseJsonToTopoInput(text);
+
++    const dialectInfo = new SourceDialectInfo({
+
++      format: 'JSON',
+
++      dialect: 'GENERIC_JSON_TOPO',
+
++      units: 'SOURCE_DEFINED',
+
++      axisConvention: 'SOURCE_DEFINED',
+
++      metadata: {
+
++        segmentCount: parsedTopo.segments.length,
+
++        supportCount: parsedTopo.supports.length,
+
++      },
+
++    });
+
++
+
++    const sourceRecord = new SourceFileRecord({
+
++      id: id || `json-${Date.now()}`,
+
++      name,
+
++      format: 'JSON',
+
++      dialect: dialectInfo.dialect,
+
++      rawText: text,
+
++      rawJson: parsedTopo.rawJson,
+
++      metadata: { dialectInfo },
+
++    });
+
++
+
++    for (const message of parsedTopo.messages || []) {
+
++      sourceRecord.addMessage(message.level || 'INFO', message.message || '', message.details || {});
+
++    }
+
++
+
++    const { project, topoGraph, supportSpecs } = buildCanonicalProjectFromTopoSource({
+
++      sourceRecord,
+
++      topoInput: parsedTopo,
+
++      format: 'JSON',
+
++      profileOverride: cloneDefaultTopoProfile('JSON'),
+
++    });
+
++
+
++    sourceRecord.addMessage('INFO', 'JSON source mapped through Topo Builder.', {
+
++      topo: {
+
++        nodes: topoGraph.nodes.length,
+
++        segments: topoGraph.segments.length,
+
++        components: topoGraph.components.length,
+
++      },
+
++      supportSpecs: supportSpecs.length,
+
++    });
+
++
+
++    return {
+
++      sourceRecord,
+
++      parsed: {
+
++        topoInput: parsedTopo,
+
++        topoGraph,
+
++        supportSpecs,
+
++      },
+
++      project,
+
++      diagnostics: {
+
++        source: sourceRecord.messages,
+
++        canonical: project?.diagnostics?.messages || [],
+
++      },
+
++    };
+
++  }
+
++}
+
+
+diff --git a/viewer/interchange/topo/template-evaluator.js b/viewer/interchange/topo/template-evaluator.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/interchange/topo/template-evaluator.js
++++ b/viewer/interchange/topo/template-evaluator.js
+@@ -0,0 +1,81 @@
++﻿/**
+
++ * template-evaluator.js
+
++ * Safe path+template evaluation for interchange mapping profiles.
+
++ *
+
++ * Supported expression forms:
+
++ * - {{path.to.value}}
+
++ * - {{path.to.value || "fallback"}}
+
++ * - Plain template text with multiple placeholders.
+
++ *
+
++ * Not supported by design:
+
++ * - Arbitrary JS execution
+
++ * - Arithmetic operators
+
++ */
+
++
+
++function _toText(value) {
+
++  if (value === undefined || value === null) return '';
+
++  return String(value);
+
++}
+
++
+
++function _toAliasKey(key) {
+
++  return _toText(key).replace(/[^A-Za-z0-9]/g, '_');
+
++}
+
++
+
++export function withAliasedKeys(raw = {}) {
+
++  const out = { ...raw };
+
++  for (const [key, value] of Object.entries(raw || {})) {
+
++    const alias = _toAliasKey(key);
+
++    if (!alias) continue;
+
++    if (!(alias in out)) out[alias] = value;
+
++  }
+
++  return out;
+
++}
+
++
+
++function _splitPath(pathText) {
+
++  const clean = _toText(pathText)
+
++    .trim()
+
++    .replace(/^\$\./, '')
+
++    .replace(/^\./, '');
+
++  if (!clean) return [];
+
++  return clean.split('.').map((part) => part.trim()).filter(Boolean);
+
++}
+
++
+
++export function getPathValue(context, pathText) {
+
++  const parts = _splitPath(pathText);
+
++  if (!parts.length) return undefined;
+
++  let cursor = context;
+
++  for (const part of parts) {
+
++    if (!cursor || typeof cursor !== 'object') return undefined;
+
++    if (!(part in cursor)) return undefined;
+
++    cursor = cursor[part];
+
++  }
+
++  return cursor;
+
++}
+
++
+
++function _parseLiteral(part) {
+
++  const text = _toText(part).trim();
+
++  if (/^".*"$/.test(text) || /^'.*'$/.test(text)) return text.slice(1, -1);
+
++  if (/^[+-]?\d+(?:\.\d+)?$/.test(text)) return Number(text);
+
++  return undefined;
+
++}
+
++
+
++export function evaluatePathExpression(expression, context) {
+
++  const chunks = _toText(expression).split('||').map((item) => item.trim()).filter(Boolean);
+
++  for (const chunk of chunks) {
+
++    const literal = _parseLiteral(chunk);
+
++    if (literal !== undefined && literal !== '') return literal;
+
++    const value = getPathValue(context, chunk);
+
++    if (value !== undefined && value !== null && _toText(value).trim() !== '') return value;
+
++  }
+
++  return '';
+
++}
+
++
+
++export function renderTemplate(template, context) {
+
++  const text = _toText(template);
+
++  if (!text.includes('{{')) {
+
++    const direct = evaluatePathExpression(text, context);
+
++    if (direct === '') return text;
+
++    return _toText(direct);
+
++  }
+
++  return text.replace(/\{\{([^{}]+)\}\}/g, (_, expr) => _toText(evaluatePathExpression(expr, context)));
+
++}
+
+
+diff --git a/viewer/interchange/topo/topo-mapping-profiles.js b/viewer/interchange/topo/topo-mapping-profiles.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/interchange/topo/topo-mapping-profiles.js
++++ b/viewer/interchange/topo/topo-mapping-profiles.js
+@@ -0,0 +1,66 @@
++﻿/**
+
++ * topo-mapping-profiles.js
+
++ * Format-scoped mapping profile defaults for Topo Builder.
+
++ */
+
++
+
++function cloneJson(value) {
+
++  return JSON.parse(JSON.stringify(value));
+
++}
+
++
+
++export const DEFAULT_TOPO_MAPPING_PROFILES = Object.freeze({
+
++  REV: {
+
++    component: {
+
++      idTemplate: '{{source.id || source.index}}',
+
++      refNoTemplate: '{{raw.CA97 || source.id || source.index}}',
+
++      seqNoTemplate: '{{raw.CA98 || source.index}}',
+
++      pipelineRefTemplate: '{{raw.PIPELINE_REFERENCE || raw.LINE_NO || raw.groupPath || "REV-LINE"}}',
+
++      lineNoKeyTemplate: '{{raw.LINE_NO || raw.groupPath || raw.PIPELINE_REFERENCE || "REV-LINE"}}',
+
++      sKeyTemplate: '{{raw.SKEY || raw.ITEM_CODE || source.type || "PIPE"}}'
+
++    },
+
++    support: {
+
++      idTemplate: '{{source.id || source.index}}',
+
++      supportKindTemplate: '{{raw.SKEY || raw.ITEM_CODE || raw.groupPath || "SUPPORT"}}',
+
++      orientationTemplate: '{{raw.SUPPORT_DIRECTION || raw.direction || "UNKNOWN"}}',
+
++      sizeTemplate: '{{raw.SIZE || raw.bore || ""}}'
+
++    }
+
++  },
+
++  JSON: {
+
++    component: {
+
++      idTemplate: '{{source.path || source.id || source.index}}',
+
++      refNoTemplate: '{{raw.CA97 || source.path || source.index}}',
+
++      seqNoTemplate: '{{raw.CA98 || source.index}}',
+
++      pipelineRefTemplate: '{{raw.pipelineRef || raw.lineNo || raw.LINE_NO || "JSON-LINE"}}',
+
++      lineNoKeyTemplate: '{{raw.lineNo || raw.LINE_NO || raw.pipelineRef || "JSON-LINE"}}',
+
++      sKeyTemplate: '{{raw.sKey || raw.SKEY || source.type || "PIPE"}}'
+
++    },
+
++    support: {
+
++      idTemplate: '{{source.path || source.id || source.index}}',
+
++      supportKindTemplate: '{{raw.sKey || raw.SKEY || raw.supportType || "SUPPORT"}}',
+
++      orientationTemplate: '{{raw.supportDirection || raw.direction || "UNKNOWN"}}',
+
++      sizeTemplate: '{{raw.size || raw.bore || ""}}'
+
++    }
+
++  },
+
++  XML: {
+
++    component: {
+
++      idTemplate: '{{source.id || source.index}}',
+
++      refNoTemplate: '{{raw.CA97 || source.id || source.index}}',
+
++      seqNoTemplate: '{{raw.CA98 || source.index}}',
+
++      pipelineRefTemplate: '{{raw.LINE_NO || raw.LINE_NO_KEY || "XML-LINE"}}',
+
++      lineNoKeyTemplate: '{{raw.LINE_NO_KEY || raw.LINE_NO || "XML-LINE"}}',
+
++      sKeyTemplate: '{{raw.SKEY || source.type || "PIPE"}}'
+
++    },
+
++    support: {
+
++      idTemplate: '{{source.id || source.index}}',
+
++      supportKindTemplate: '{{raw.SUPPORT_NAME || raw.TYPE || "SUPPORT"}}',
+
++      orientationTemplate: '{{raw.SUPPORT_DIRECTION || raw.TYPE || "UNKNOWN"}}',
+
++      sizeTemplate: '{{raw.SIZE || raw.OD || ""}}'
+
++    }
+
++  }
+
++});
+
++
+
++export function cloneDefaultTopoProfile(formatKey) {
+
++  const key = String(formatKey || '').toUpperCase();
+
++  const fallback = DEFAULT_TOPO_MAPPING_PROFILES.XML;
+
++  const selected = DEFAULT_TOPO_MAPPING_PROFILES[key] || fallback;
+
++  return cloneJson(selected);
+
++}
+
+
+diff --git a/viewer/interchange/topo/topo-builder.js b/viewer/interchange/topo/topo-builder.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/interchange/topo/topo-builder.js
++++ b/viewer/interchange/topo/topo-builder.js
+@@ -0,0 +1,557 @@
++﻿/**
+
++ * topo-builder.js
+
++ * Unified Topo Builder for REV/JSON/XML import into canonical preview.
+
++ *
+
++ * Contract: TopoGraph
+
++ * - nodes: [{ id, position, sourceRefs }]
+
++ * - segments: [{ id, fromNodeId, toNodeId, normalized, rawAttributes, sourceRefs }]
+
++ * - components: [{ id, type, anchorNodeIds, normalized, rawAttributes, sourceRefs }]
+
++ * - anchors: [{ componentId, ep1NodeId, ep2NodeId, cpNodeId, bpNodeId }]
+
++ * - sourceRefs: aggregated source references
+
++ */
+
++
+
++import { CanonicalProject } from '../canonical/CanonicalProject.js';
+
++import { CanonicalAssembly } from '../canonical/CanonicalAssembly.js';
+
++import { CanonicalNode } from '../canonical/CanonicalNode.js';
+
++import { CanonicalSegment } from '../canonical/CanonicalSegment.js';
+
++import { CanonicalComponent } from '../canonical/CanonicalComponent.js';
+
++import { FidelityClass } from '../canonical/FidelityClass.js';
+
++import { getConversionConfig } from '../config/conversion-config-store.js';
+
++import { cloneDefaultTopoProfile } from './topo-mapping-profiles.js';
+
++import { getSupportMappingConfig } from '../support/support-mapping-store.js';
+
++import { withAliasedKeys, renderTemplate } from './template-evaluator.js';
+
++import { buildSupportSpecs } from '../support/support-builder.js';
+
++
+
++function toFiniteNumber(value, fallback = null) {
+
++  const numeric = Number(value);
+
++  return Number.isFinite(numeric) ? numeric : fallback;
+
++}
+
++
+
++function toPoint(value) {
+
++  if (!value || typeof value !== 'object') return null;
+
++  const x = toFiniteNumber(value.x);
+
++  const y = toFiniteNumber(value.y);
+
++  const z = toFiniteNumber(value.z);
+
++  if (x === null || y === null || z === null) return null;
+
++  const point = { x, y, z };
+
++  const bore = toFiniteNumber(value.bore);
+
++  if (bore !== null) point.bore = bore;
+
++  return point;
+
++}
+
++
+
++function distance(a, b) {
+
++  if (!a || !b) return Number.POSITIVE_INFINITY;
+
++  const dx = a.x - b.x;
+
++  const dy = a.y - b.y;
+
++  const dz = a.z - b.z;
+
++  return Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
+
++}
+
++
+
++function bucketRegistry(toleranceMm) {
+
++  const tolerance = Math.max(toFiniteNumber(toleranceMm, 0.5), 0.0001);
+
++  const buckets = new Map();
+
++  const nodes = [];
+
++  let counter = 1;
+
++
+
++  function toBucket(value) {
+
++    return Math.round(value / tolerance);
+
++  }
+
++
+
++  function bucketKey(ix, iy, iz) {
+
++    return `${ix}|${iy}|${iz}`;
+
++  }
+
++
+
++  function pointBucket(point) {
+
++    return {
+
++      ix: toBucket(point.x),
+
++      iy: toBucket(point.y),
+
++      iz: toBucket(point.z),
+
++    };
+
++  }
+
++
+
++  function nearCandidates(point) {
+
++    const b = pointBucket(point);
+
++    const out = [];
+
++    for (let dx = -1; dx <= 1; dx += 1) {
+
++      for (let dy = -1; dy <= 1; dy += 1) {
+
++        for (let dz = -1; dz <= 1; dz += 1) {
+
++          const key = bucketKey(b.ix + dx, b.iy + dy, b.iz + dz);
+
++          const list = buckets.get(key);
+
++          if (list && list.length) out.push(...list);
+
++        }
+
++      }
+
++    }
+
++    return out;
+
++  }
+
++
+
++  function register(point, assemblyId, sourceRef) {
+
++    const candidates = nearCandidates(point);
+
++    let nearest = null;
+
++    let nearestDist = Number.POSITIVE_INFINITY;
+
++    for (const node of candidates) {
+
++      const d = distance(node.position, point);
+
++      if (d <= tolerance && d < nearestDist) {
+
++        nearest = node;
+
++        nearestDist = d;
+
++      }
+
++    }
+
++    if (nearest) {
+
++      if (sourceRef) nearest.sourceRefs.push(sourceRef);
+
++      return nearest;
+
++    }
+
++
+
++    const node = new CanonicalNode({
+
++      id: `N-${counter++}`,
+
++      assemblyId,
+
++      position: { x: point.x, y: point.y, z: point.z },
+
++      sourceRefs: sourceRef ? [sourceRef] : [],
+
++      metadata: {},
+
++    });
+
++    const b = pointBucket(point);
+
++    const key = bucketKey(b.ix, b.iy, b.iz);
+
++    if (!buckets.has(key)) buckets.set(key, []);
+
++    buckets.get(key).push(node);
+
++    nodes.push(node);
+
++    return node;
+
++  }
+
++
+
++  function findNearest(point) {
+
++    let best = null;
+
++    let bestDistance = Number.POSITIVE_INFINITY;
+
++    for (const node of nodes) {
+
++      const d = distance(node.position, point);
+
++      if (d < bestDistance) {
+
++        bestDistance = d;
+
++        best = node;
+
++      }
+
++    }
+
++    return best ? { node: best, distance: bestDistance } : null;
+
++  }
+
++
+
++  return {
+
++    register,
+
++    all: () => nodes,
+
++    findNearest,
+
++    tolerance,
+
++  };
+
++}
+
++
+
++function buildAdjacency(segments) {
+
++  const adj = new Map();
+
++  for (const segment of segments || []) {
+
++    const fromRef = String(segment?.fromRef || '').trim();
+
++    const toRef = String(segment?.toRef || '').trim();
+
++    const dx = toFiniteNumber(segment?.dx);
+
++    const dy = toFiniteNumber(segment?.dy);
+
++    const dz = toFiniteNumber(segment?.dz);
+
++    if (!fromRef || !toRef) continue;
+
++    if (dx === null || dy === null || dz === null) continue;
+
++
+
++    if (!adj.has(fromRef)) adj.set(fromRef, []);
+
++    if (!adj.has(toRef)) adj.set(toRef, []);
+
++
+
++    adj.get(fromRef).push({ to: toRef, dx, dy, dz });
+
++    adj.get(toRef).push({ to: fromRef, dx: -dx, dy: -dy, dz: -dz });
+
++  }
+
++  return adj;
+
++}
+
++
+
++function solveRelativeNodePositions(segments, tolerance, diagnostics) {
+
++  const adjacency = buildAdjacency(segments);
+
++  const solved = new Map();
+
++
+
++  for (const startNode of adjacency.keys()) {
+
++    if (solved.has(startNode)) continue;
+
++    solved.set(startNode, { x: 0, y: 0, z: 0 });
+
++    const queue = [startNode];
+
++
+
++    while (queue.length) {
+
++      const current = queue.shift();
+
++      const origin = solved.get(current);
+
++      const edges = adjacency.get(current) || [];
+
++      for (const edge of edges) {
+
++        const candidate = {
+
++          x: origin.x + edge.dx,
+
++          y: origin.y + edge.dy,
+
++          z: origin.z + edge.dz,
+
++        };
+
++        if (!solved.has(edge.to)) {
+
++          solved.set(edge.to, candidate);
+
++          queue.push(edge.to);
+
++          continue;
+
++        }
+
++        const previous = solved.get(edge.to);
+
++        if (distance(previous, candidate) > tolerance) {
+
++          diagnostics.warn('TOPO_NODE_MERGE_CONFLICT', 'Node merge conflict detected while solving relative positions.', {
+
++            nodeRef: edge.to,
+
++            previous,
+
++            candidate,
+
++            tolerance,
+
++          });
+
++        }
+
++      }
+
++    }
+
++  }
+
++
+
++  return solved;
+
++}
+
++
+
++function calcGraphRole(degA, degB) {
+
++  const maxDeg = Math.max(degA, degB);
+
++  const minDeg = Math.min(degA, degB);
+
++  if (maxDeg >= 3 && minDeg <= 1) return 'BRANCH_OFF';
+
++  if (minDeg <= 1) return 'DEADLEG';
+
++  return 'RUN';
+
++}
+
++
+
++function computeDerived(ep1, ep2, cp, bp) {
+
++  const dx = ep2.x - ep1.x;
+
++  const dy = ep2.y - ep1.y;
+
++  const dz = ep2.z - ep1.z;
+
++  const length = Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
+
++  const derived = { dx, dy, dz, length };
+
++  if (cp) derived.bendCp = { x: cp.x, y: cp.y, z: cp.z };
+
++  if (bp) {
+
++    derived.teeCp = { x: bp.x, y: bp.y, z: bp.z };
+
++    const bdx = bp.x - ep1.x;
+
++    const bdy = bp.y - ep1.y;
+
++    const bdz = bp.z - ep1.z;
+
++    derived.branchLength = Math.sqrt((bdx * bdx) + (bdy * bdy) + (bdz * bdz));
+
++  }
+
++  return derived;
+
++}
+
++
+
++function normalizeSeqNo(value, fallback) {
+
++  const numeric = Number(value);
+
++  if (Number.isFinite(numeric)) return numeric;
+
++  return fallback;
+
++}
+
++
+
++
+
++function deepMerge(left, right) {
+
++  if (!left || typeof left !== 'object' || Array.isArray(left)) return right ?? left;
+
++  if (!right || typeof right !== 'object' || Array.isArray(right)) return right ?? left;
+
++  const out = { ...left };
+
++  for (const [key, value] of Object.entries(right)) {
+
++    const current = out[key];
+
++    if (current && typeof current === 'object' && !Array.isArray(current) && value && typeof value === 'object' && !Array.isArray(value)) {
+
++      out[key] = deepMerge(current, value);
+
++    } else {
+
++      out[key] = value;
+
++    }
+
++  }
+
++  return out;
+
++}
+
++
+
++function resolveFormatProfile(format, profileOverride) {
+
++  const base = cloneDefaultTopoProfile(format);
+
++  const cfg = getSupportMappingConfig();
+
++  const cfgProfile = cfg?.formats?.[String(format || '').toUpperCase()]?.topoMappingProfile || {};
+
++  const withCfg = deepMerge(base, cfgProfile);
+
++  if (!profileOverride || typeof profileOverride !== 'object') return withCfg;
+
++  return deepMerge(withCfg, profileOverride);
+
++}
+
++function applyComponentMapping(format, profile, source, raw, index) {
+
++  const context = {
+
++    source: {
+
++      id: source?.id,
+
++      index,
+
++      type: source?.type,
+
++      path: source?.path,
+
++    },
+
++    raw,
+
++    geometry: {
+
++      ep1: source?.ep1,
+
++      ep2: source?.ep2,
+
++      cp: source?.cp,
+
++      bp: source?.bp,
+
++      supportCoord: source?.supportCoord,
+
++    },
+
++  };
+
++
+
++  const componentProfile = profile?.component || {};
+
++  const id = renderTemplate(componentProfile.idTemplate || '{{source.id || source.index}}', context);
+
++  const refNo = renderTemplate(componentProfile.refNoTemplate || '{{source.id || source.index}}', context);
+
++  const seqNoRaw = renderTemplate(componentProfile.seqNoTemplate || '{{source.index}}', context);
+
++  const pipelineRef = renderTemplate(componentProfile.pipelineRefTemplate || '{{raw.PIPELINE_REFERENCE || ""}}', context);
+
++  const lineNoKey = renderTemplate(componentProfile.lineNoKeyTemplate || '{{raw.LINE_NO || raw.PIPELINE_REFERENCE || ""}}', context);
+
++  const sKey = renderTemplate(componentProfile.sKeyTemplate || '{{raw.SKEY || source.type || "PIPE"}}', context);
+
++
+
++  return {
+
++    id,
+
++    refNo,
+
++    seqNo: normalizeSeqNo(seqNoRaw, (index + 1) * 10),
+
++    pipelineRef,
+
++    lineNoKey,
+
++    sKey,
+
++    format,
+
++  };
+
++}
+
++
+
++function buildSourceRefs(segment, index, format) {
+
++  if (Array.isArray(segment?.sourceRefs) && segment.sourceRefs.length) return segment.sourceRefs;
+
++  return [{ format, sourceId: `ITEM:${index + 1}` }];
+
++}
+
++
+
++export function buildCanonicalProjectFromTopoSource({
+
++  sourceRecord,
+
++  topoInput,
+
++  format,
+
++  profileOverride,
+
++}) {
+
++  const conversionConfig = getConversionConfig();
+
++  const profile = resolveFormatProfile(format, profileOverride);
+
++  const tolerance = Math.max(toFiniteNumber(conversionConfig?.topology?.nodeMergeToleranceMm, 0.5), 0.0001);
+
++
+
++  const project = new CanonicalProject({
+
++    id: `project-${sourceRecord?.id || Date.now()}`,
+
++    name: sourceRecord?.name || 'Topo Project',
+
++    metadata: {
+
++      format: String(format || '').toUpperCase(),
+
++      dialect: sourceRecord?.dialect || 'TOPO',
+
++      sourceName: sourceRecord?.name || '',
+
++      units: conversionConfig?.profile?.units || 'mm',
+
++    },
+
++  });
+
++  project.addSourceFile(sourceRecord);
+
++
+
++  const assembly = new CanonicalAssembly({
+
++    id: 'ASM-1',
+
++    name: sourceRecord?.name ? `${sourceRecord.name} Assembly` : 'Assembly 1',
+
++    placement: { x: 0, y: 0, z: 0 },
+
++    sourceRefs: [{ format: String(format || '').toUpperCase(), sourceId: sourceRecord?.id || 'source' }],
+
++  });
+
++
+
++  project.nodes = [];
+
++  project.segments = [];
+
++  project.components = [];
+
++  project.supports = [];
+
++  project.annotations = [];
+
++
+
++  const topoGraph = {
+
++    nodes: [],
+
++    segments: [],
+
++    components: [],
+
++    anchors: [],
+
++    sourceRefs: [],
+
++  };
+
++
+
++  const segments = Array.isArray(topoInput?.segments) ? topoInput.segments : [];
+
++  const supports = Array.isArray(topoInput?.supports) ? topoInput.supports : [];
+
++  const annotations = Array.isArray(topoInput?.annotations) ? topoInput.annotations : [];
+
++
+
++  const solvedRefs = solveRelativeNodePositions(segments, tolerance, project.diagnostics);
+
++  const nodeRegistry = bucketRegistry(tolerance);
+
++
+
++  const degreesByNodeId = new Map();
+
++  const registerDegree = (nodeId) => degreesByNodeId.set(nodeId, (degreesByNodeId.get(nodeId) || 0) + 1);
+
++
+
++  let segmentCounter = 1;
+
++  let componentCounter = 1;
+
++
+
++  for (let index = 0; index < segments.length; index += 1) {
+
++    const sourceSegment = segments[index];
+
++    const raw = withAliasedKeys(sourceSegment?.rawAttributes || {});
+
++    let ep1 = toPoint(sourceSegment?.ep1);
+
++    let ep2 = toPoint(sourceSegment?.ep2);
+
++
+
++    if (!ep1 && sourceSegment?.fromRef) {
+
++      ep1 = toPoint(solvedRefs.get(String(sourceSegment.fromRef)));
+
++    }
+
++    if (!ep2 && sourceSegment?.toRef) {
+
++      ep2 = toPoint(solvedRefs.get(String(sourceSegment.toRef)));
+
++    }
+
++
+
++    if (!ep1 || !ep2) {
+
++      project.diagnostics.warn('TOPO_COMPONENT_MISSING_ENDPOINTS', 'Segment skipped because endpoints could not be resolved.', {
+
++        sourceId: sourceSegment?.id || null,
+
++        fromRef: sourceSegment?.fromRef || null,
+
++        toRef: sourceSegment?.toRef || null,
+
++      });
+
++      continue;
+
++    }
+
++
+
++    const sourceRefs = buildSourceRefs(sourceSegment, index, String(format || '').toUpperCase());
+
++    const map = applyComponentMapping(format, profile, sourceSegment, raw, index);
+
++
+
++    const fromNode = nodeRegistry.register(ep1, assembly.id, sourceRefs[0]);
+
++    const toNode = nodeRegistry.register(ep2, assembly.id, sourceRefs[0]);
+
++    registerDegree(fromNode.id);
+
++    registerDegree(toNode.id);
+
++
+
++    const cp = toPoint(sourceSegment?.cp);
+
++    const bp = toPoint(sourceSegment?.bp);
+
++    const derived = computeDerived(ep1, ep2, cp, bp);
+
++
+
++    const segment = new CanonicalSegment({
+
++      id: `SEG-${segmentCounter}`,
+
++      assemblyId: assembly.id,
+
++      fromNodeId: fromNode.id,
+
++      toNodeId: toNode.id,
+
++      graphRole: 'RUN',
+
++      nominalBore: toFiniteNumber(ep1?.bore),
+
++      rawAttributes: raw,
+
++      derivedAttributes: derived,
+
++      normalized: {
+
++        componentType: String(sourceSegment?.type || 'PIPE').toUpperCase(),
+
++        lineNoKey: map.lineNoKey,
+
++        pipelineRef: map.pipelineRef,
+
++        sKey: map.sKey,
+
++        refNo: map.refNo,
+
++        seqNo: map.seqNo,
+
++      },
+
++      lineRef: map.lineNoKey || map.pipelineRef || '',
+
++      sourceRefs,
+
++      fidelity: FidelityClass.NORMALIZED_LOSSLESS,
+
++      metadata: {
+
++        topologicalId: sourceSegment?.id || `segment-${index + 1}`,
+
++      },
+
++    });
+
++    project.segments.push(segment);
+
++    assembly.segmentIds.push(segment.id);
+
++
+
++    const component = new CanonicalComponent({
+
++      id: `CMP-${componentCounter}`,
+
++      assemblyId: assembly.id,
+
++      type: String(sourceSegment?.type || 'PIPE').toUpperCase(),
+
++      anchorNodeIds: [fromNode.id, toNode.id],
+
++      hostSegmentIds: [segment.id],
+
++      rawAttributes: raw,
+
++      derivedAttributes: derived,
+
++      normalized: {
+
++        id: map.id,
+
++        lineNoKey: map.lineNoKey,
+
++        pipelineRef: map.pipelineRef,
+
++        sKey: map.sKey,
+
++        refNo: map.refNo,
+
++        seqNo: map.seqNo,
+
++        ep1,
+
++        ep2,
+
++        cp: cp || null,
+
++        bp: bp || null,
+
++      },
+
++      sourceRefs,
+
++      fidelity: FidelityClass.NORMALIZED_LOSSLESS,
+
++    });
+
++    project.components.push(component);
+
++    assembly.componentIds.push(component.id);
+
++
+
++    topoGraph.segments.push({
+
++      id: segment.id,
+
++      fromNodeId: fromNode.id,
+
++      toNodeId: toNode.id,
+
++      normalized: segment.normalized,
+
++      rawAttributes: raw,
+
++      sourceRefs,
+
++    });
+
++    topoGraph.components.push({
+
++      id: component.id,
+
++      type: component.type,
+
++      anchorNodeIds: component.anchorNodeIds,
+
++      normalized: component.normalized,
+
++      rawAttributes: raw,
+
++      sourceRefs,
+
++    });
+
++    topoGraph.anchors.push({
+
++      componentId: component.id,
+
++      ep1NodeId: fromNode.id,
+
++      ep2NodeId: toNode.id,
+
++      cpNodeId: null,
+
++      bpNodeId: null,
+
++    });
+
++    topoGraph.sourceRefs.push(...sourceRefs);
+
++
+
++    segmentCounter += 1;
+
++    componentCounter += 1;
+
++  }
+
++
+
++  const nodes = nodeRegistry.all();
+
++  for (const node of nodes) {
+
++    node.connectedSegmentIds = [];
+
++    node.branchDegree = degreesByNodeId.get(node.id) || 0;
+
++    project.nodes.push(node);
+
++    assembly.nodeIds.push(node.id);
+
++    topoGraph.nodes.push({
+
++      id: node.id,
+
++      position: node.position,
+
++      sourceRefs: node.sourceRefs,
+
++    });
+
++  }
+
++
+
++  const nodeById = new Map(project.nodes.map((node) => [node.id, node]));
+
++  for (const segment of project.segments) {
+
++    const from = nodeById.get(segment.fromNodeId);
+
++    const to = nodeById.get(segment.toNodeId);
+
++    if (from) from.connectedSegmentIds.push(segment.id);
+
++    if (to) to.connectedSegmentIds.push(segment.id);
+
++  }
+
++
+
++  for (const node of project.nodes) {
+
++    node.branchDegree = node.connectedSegmentIds.length;
+
++  }
+
++
+
++  for (const segment of project.segments) {
+
++    const a = nodeById.get(segment.fromNodeId)?.branchDegree || 0;
+
++    const b = nodeById.get(segment.toNodeId)?.branchDegree || 0;
+
++    segment.graphRole = calcGraphRole(a, b);
+
++  }
+
++
+
++  const supportCandidates = [
+
++    ...(supports || []),
+
++    ...segments
+
++      .filter((item) => String(item?.type || '').toUpperCase() === 'SUPPORT')
+
++      .map((item, index) => ({
+
++        ...item,
+
++        id: item?.id || `segment-support-${index + 1}`,
+
++      })),
+
++  ];
+
++
+
++  const supportBuild = buildSupportSpecs({
+
++    format,
+
++    supportCandidates,
+
++    nodes: project.nodes,
+
++    assemblyId: assembly.id,
+
++    projectDiagnostics: project.diagnostics,
+
++  });
+
++
+
++  for (const support of supportBuild.supports) {
+
++    project.supports.push(support);
+
++    assembly.supportIds.push(support.id);
+
++  }
+
++
+
++  for (const annotation of annotations) {
+
++    project.annotations.push(annotation);
+
++    if (annotation?.id) assembly.annotationIds.push(annotation.id);
+
++  }
+
++
+
++  project.addAssembly(assembly);
+
++
+
++  project.metadata.topoGraph = {
+
++    nodeCount: topoGraph.nodes.length,
+
++    segmentCount: topoGraph.segments.length,
+
++    componentCount: topoGraph.components.length,
+
++    anchorCount: topoGraph.anchors.length,
+
++    sourceRefCount: topoGraph.sourceRefs.length,
+
++  };
+
++  project.metadata.supportSpecs = supportBuild.specs;
+
++  project.metadata.summary = {
+
++    assemblies: project.assemblies.length,
+
++    nodes: project.nodes.length,
+
++    segments: project.segments.length,
+
++    components: project.components.length,
+
++    supports: project.supports.length,
+
++    annotations: project.annotations.length,
+
++  };
+
++
+
++  project.diagnostics.info('TOPO_BUILD_COMPLETE', 'Topo graph mapped to canonical preview project.', {
+
++    format: String(format || '').toUpperCase(),
+
++    summary: project.metadata.summary,
+
++  });
+
++
+
++  return {
+
++    project,
+
++    topoGraph,
+
++    supportSpecs: supportBuild.specs,
+
++  };
+
++}
+
++
+
+
+diff --git a/viewer/interchange/support/support-mapping-config.js b/viewer/interchange/support/support-mapping-config.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/interchange/support/support-mapping-config.js
++++ b/viewer/interchange/support/support-mapping-config.js
+@@ -0,0 +1,157 @@
++﻿/**
+
++ * support-mapping-config.js
+
++ * Dedicated support-builder configuration schema and defaults.
+
++ */
+
++
+
++export const SUPPORT_MAPPING_CONFIG_VERSION = '1.0.0';
+
++
+
++function cloneJson(value) {
+
++  return JSON.parse(JSON.stringify(value));
+
++}
+
++
+
++function toFiniteNumber(value) {
+
++  const numeric = Number(value);
+
++  return Number.isFinite(numeric) ? numeric : null;
+
++}
+
++
+
++const DEFAULT_FORMAT_BLOCK = Object.freeze({
+
++  topoMappingProfile: {
+
++    component: {
+
++      idTemplate: '{{source.id || source.index}}',
+
++      refNoTemplate: '{{raw.CA97 || source.id || source.index}}',
+
++      seqNoTemplate: '{{raw.CA98 || source.index}}',
+
++      pipelineRefTemplate: '{{raw.PIPELINE_REFERENCE || raw.LINE_NO || ""}}',
+
++      lineNoKeyTemplate: '{{raw.LINE_NO || raw.PIPELINE_REFERENCE || ""}}',
+
++      sKeyTemplate: '{{raw.SKEY || source.type || "PIPE"}}'
+
++    },
+
++    support: {
+
++      idTemplate: '{{source.id || source.index}}',
+
++      supportKindTemplate: '{{raw.SKEY || raw.supportType || "SUPPORT"}}',
+
++      orientationTemplate: '{{raw.SUPPORT_DIRECTION || raw.direction || "UNKNOWN"}}',
+
++      sizeTemplate: '{{raw.SIZE || raw.bore || ""}}',
+
++      refNoTemplate: '{{raw.CA97 || source.id || source.index}}',
+
++      seqNoTemplate: '{{raw.CA98 || source.index}}'
+
++    }
+
++  },
+
++  mappingProfile: {
+
++    supportKindTemplate: '{{raw.SKEY || raw.supportType || "SUPPORT"}}',
+
++    orientationTemplate: '{{raw.SUPPORT_DIRECTION || raw.direction || "UNKNOWN"}}',
+
++    sizeTemplate: '{{raw.SIZE || raw.bore || ""}}',
+
++    refNoTemplate: '{{raw.CA97 || source.id || source.index}}',
+
++    seqNoTemplate: '{{raw.CA98 || source.index}}'
+
++  },
+
++  anchorPolicy: 'nearest-node',
+
++  tolerances: {
+
++    anchorMm: 0.5,
+
++    nodeMergeMm: 0.5
+
++  },
+
++  diagnostics: {
+
++    warnOnTemplateMiss: true,
+
++    warnOnFallback: true,
+
++    warnOnAnchorMiss: true
+
++  },
+
++  rules: [
+
++    {
+
++      id: 'default-support',
+
++      enabled: true,
+
++      priority: 100,
+
++      match: {
+
++        typeIn: ['SUPPORT'],
+
++        pathContains: ''
+
++      },
+
++      output: {
+
++        supportKindTemplate: '{{raw.SKEY || raw.supportType || "SUPPORT"}}',
+
++        orientationTemplate: '{{raw.SUPPORT_DIRECTION || raw.direction || "UNKNOWN"}}',
+
++        sizeTemplate: '{{raw.SIZE || raw.bore || ""}}'
+
++      },
+
++      anchorPolicy: 'nearest-node'
+
++    }
+
++  ]
+
++});
+
++
+
++export const DEFAULT_SUPPORT_MAPPING_CONFIG = Object.freeze({
+
++  version: SUPPORT_MAPPING_CONFIG_VERSION,
+
++  formats: {
+
++    REV: cloneJson(DEFAULT_FORMAT_BLOCK),
+
++    JSON: cloneJson(DEFAULT_FORMAT_BLOCK),
+
++    XML: cloneJson(DEFAULT_FORMAT_BLOCK),
+
++  }
+
++});
+
++
+
++function isPlainObject(value) {
+
++  return !!value && typeof value === 'object' && !Array.isArray(value);
+
++}
+
++
+
++function deepMerge(left, right) {
+
++  if (!isPlainObject(left) && !isPlainObject(right)) return right !== undefined ? right : left;
+
++  const out = {};
+
++  const keys = new Set([...Object.keys(left || {}), ...Object.keys(right || {})]);
+
++  for (const key of keys) {
+
++    const lv = left?.[key];
+
++    const rv = right?.[key];
+
++    if (isPlainObject(lv) || isPlainObject(rv)) {
+
++      out[key] = deepMerge(lv || {}, rv || {});
+
++      continue;
+
++    }
+
++    if (Array.isArray(rv)) {
+
++      out[key] = cloneJson(rv);
+
++      continue;
+
++    }
+
++    out[key] = rv !== undefined ? rv : lv;
+
++  }
+
++  return out;
+
++}
+
++
+
++export function normalizeSupportMappingConfig(config) {
+
++  const merged = deepMerge(DEFAULT_SUPPORT_MAPPING_CONFIG, config || {});
+
++  return {
+
++    config: merged,
+
++    validation: validateSupportMappingConfig(merged),
+
++  };
+
++}
+
++
+
++export function validateSupportMappingConfig(config) {
+
++  const errors = [];
+
++  const warnings = [];
+
++  const fieldErrors = {};
+
++
+
++  function addError(path, message) {
+
++    errors.push(message);
+
++    fieldErrors[path] = message;
+
++  }
+
++
+
++  if (!isPlainObject(config)) {
+
++    return { ok: false, errors: ['Support mapping config must be an object.'], warnings, fieldErrors };
+
++  }
+
++
+
++  const formats = config.formats;
+
++  if (!isPlainObject(formats)) {
+
++    addError('formats', 'formats must be an object with REV/JSON/XML keys.');
+
++  } else {
+
++    for (const formatKey of ['REV', 'JSON', 'XML']) {
+
++      const block = formats[formatKey];
+
++      if (!isPlainObject(block)) {
+
++        addError(`formats.${formatKey}`, `${formatKey} block is required.`);
+
++        continue;
+
++      }
+
++      const anchorMm = toFiniteNumber(block?.tolerances?.anchorMm);
+
++      if (!(anchorMm > 0)) addError(`formats.${formatKey}.tolerances.anchorMm`, 'anchorMm must be > 0.');
+
++      const nodeMergeMm = toFiniteNumber(block?.tolerances?.nodeMergeMm);
+
++      if (!(nodeMergeMm > 0)) addError(`formats.${formatKey}.tolerances.nodeMergeMm`, 'nodeMergeMm must be > 0.');
+
++      if (!Array.isArray(block.rules)) addError(`formats.${formatKey}.rules`, 'rules must be an array.');
+
++      if (!isPlainObject(block.mappingProfile)) addError(`formats.${formatKey}.mappingProfile`, 'mappingProfile must be an object.');
+
++      if (!isPlainObject(block.topoMappingProfile)) addError(`formats.${formatKey}.topoMappingProfile`, 'topoMappingProfile must be an object.');
+
++    }
+
++  }
+
++
+
++  return {
+
++    ok: errors.length === 0,
+
++    errors,
+
++    warnings,
+
++    fieldErrors,
+
++  };
+
++}
+
++
+
++export function cloneDefaultSupportMappingConfig() {
+
++  return cloneJson(DEFAULT_SUPPORT_MAPPING_CONFIG);
+
++}
+
+
+diff --git a/viewer/interchange/support/support-mapping-store.js b/viewer/interchange/support/support-mapping-store.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/interchange/support/support-mapping-store.js
++++ b/viewer/interchange/support/support-mapping-store.js
+@@ -0,0 +1,157 @@
++﻿/**
+
++ * support-mapping-store.js
+
++ * LocalStorage-backed store for support mapping configuration.
+
++ */
+
++
+
++import { emit } from '../../core/event-bus.js';
+
++import { RuntimeEvents } from '../../contracts/runtime-events.js';
+
++import {
+
++  cloneDefaultSupportMappingConfig,
+
++  normalizeSupportMappingConfig,
+
++  validateSupportMappingConfig,
+
++  SUPPORT_MAPPING_CONFIG_VERSION,
+
++} from './support-mapping-config.js';
+
++
+
++const STORAGE_KEY = 'interchange.supportMappingConfig.v1';
+
++const listeners = new Set();
+
++
+
++function cloneJson(value) {
+
++  return JSON.parse(JSON.stringify(value));
+
++}
+
++
+
++function getStorage() {
+
++  try {
+
++    if (typeof window === 'undefined') return null;
+
++    return window.localStorage || null;
+
++  } catch {
+
++    return null;
+
++  }
+
++}
+
++
+
++function readStored() {
+
++  const storage = getStorage();
+
++  if (!storage) return null;
+
++  const raw = storage.getItem(STORAGE_KEY);
+
++  if (!raw) return null;
+
++  try {
+
++    const parsed = JSON.parse(raw);
+
++    if (parsed && typeof parsed === 'object') return parsed;
+
++  } catch {
+
++    return null;
+
++  }
+
++  return null;
+
++}
+
++
+
++function writeStored(config, source) {
+
++  const storage = getStorage();
+
++  if (!storage) return;
+
++  const payload = {
+
++    version: SUPPORT_MAPPING_CONFIG_VERSION,
+
++    source,
+
++    savedAt: new Date().toISOString(),
+
++    config,
+
++  };
+
++  storage.setItem(STORAGE_KEY, JSON.stringify(payload));
+
++}
+
++
+
++let runtimeConfig = cloneDefaultSupportMappingConfig();
+
++let runtimeMeta = {
+
++  loadedFromStorage: false,
+
++  source: 'default',
+
++  version: SUPPORT_MAPPING_CONFIG_VERSION,
+
++  validation: validateSupportMappingConfig(runtimeConfig),
+
++};
+
++
+
++function notify(type, payload) {
+
++  for (const listener of listeners) {
+
++    try { listener({ type, ...payload }); } catch {}
+
++  }
+
++  try {
+
++    emit(type, payload);
+
++  } catch {}
+
++}
+
++
+
++export function subscribeSupportMappingConfig(listener) {
+
++  listeners.add(listener);
+
++  return () => listeners.delete(listener);
+
++}
+
++
+
++export function getSupportMappingConfig() {
+
++  return cloneJson(runtimeConfig);
+
++}
+
++
+
++export function getSupportMappingConfigMeta() {
+
++  return cloneJson(runtimeMeta);
+
++}
+
++
+
++export function loadSupportMappingConfig() {
+
++  const stored = readStored();
+
++  if (!stored?.config) {
+
++    runtimeConfig = cloneDefaultSupportMappingConfig();
+
++    runtimeMeta = {
+
++      loadedFromStorage: false,
+
++      source: 'default',
+
++      version: SUPPORT_MAPPING_CONFIG_VERSION,
+
++      validation: validateSupportMappingConfig(runtimeConfig),
+
++    };
+
++    notify(RuntimeEvents.SUPPORT_MAPPING_CONFIG_LOADED, { source: 'default', config: getSupportMappingConfig() });
+
++    return { config: getSupportMappingConfig(), loadedFromStorage: false };
+
++  }
+
++
+
++  const normalized = normalizeSupportMappingConfig(stored.config);
+
++  if (!normalized.validation.ok) {
+
++    runtimeConfig = cloneDefaultSupportMappingConfig();
+
++    runtimeMeta = {
+
++      loadedFromStorage: false,
+
++      source: 'storage-invalid-reset',
+
++      version: SUPPORT_MAPPING_CONFIG_VERSION,
+
++      validation: normalized.validation,
+
++    };
+
++    writeStored(runtimeConfig, 'storage-invalid-reset');
+
++    notify(RuntimeEvents.SUPPORT_MAPPING_CONFIG_ERROR, { validation: normalized.validation });
+
++    return { config: getSupportMappingConfig(), loadedFromStorage: false };
+
++  }
+
++
+
++  runtimeConfig = normalized.config;
+
++  runtimeMeta = {
+
++    loadedFromStorage: true,
+
++    source: stored.source || 'localStorage',
+
++    version: stored.version || SUPPORT_MAPPING_CONFIG_VERSION,
+
++    validation: normalized.validation,
+
++  };
+
++  notify(RuntimeEvents.SUPPORT_MAPPING_CONFIG_LOADED, { source: runtimeMeta.source, config: getSupportMappingConfig() });
+
++  return { config: getSupportMappingConfig(), loadedFromStorage: true };
+
++}
+
++
+
++export function replaceSupportMappingConfig(config, source = 'support-config-tab') {
+
++  const normalized = normalizeSupportMappingConfig(config);
+
++  if (!normalized.validation.ok) {
+
++    notify(RuntimeEvents.SUPPORT_MAPPING_CONFIG_ERROR, { source, validation: normalized.validation });
+
++    throw new Error(`Invalid support mapping config: ${normalized.validation.errors.join(' ')}`);
+
++  }
+
++  runtimeConfig = normalized.config;
+
++  runtimeMeta = {
+
++    loadedFromStorage: true,
+
++    source,
+
++    version: SUPPORT_MAPPING_CONFIG_VERSION,
+
++    validation: normalized.validation,
+
++  };
+
++  writeStored(runtimeConfig, source);
+
++  notify(RuntimeEvents.SUPPORT_MAPPING_CONFIG_CHANGED, { source, config: getSupportMappingConfig() });
+
++  notify(RuntimeEvents.SUPPORT_MAPPING_CHANGED, { source, config: getSupportMappingConfig() });
+
++  return { config: getSupportMappingConfig(), validation: normalized.validation };
+
++}
+
++
+
++export function resetSupportMappingConfig() {
+
++  runtimeConfig = cloneDefaultSupportMappingConfig();
+
++  runtimeMeta = {
+
++    loadedFromStorage: false,
+
++    source: 'reset',
+
++    version: SUPPORT_MAPPING_CONFIG_VERSION,
+
++    validation: validateSupportMappingConfig(runtimeConfig),
+
++  };
+
++  writeStored(runtimeConfig, 'reset');
+
++  notify(RuntimeEvents.SUPPORT_MAPPING_CONFIG_RESET, { source: 'reset', config: getSupportMappingConfig() });
+
++  notify(RuntimeEvents.SUPPORT_MAPPING_CHANGED, { source: 'reset', config: getSupportMappingConfig() });
+
++  return { config: getSupportMappingConfig(), validation: runtimeMeta.validation };
+
++}
+
+
+diff --git a/viewer/interchange/support/support-builder.js b/viewer/interchange/support/support-builder.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/interchange/support/support-builder.js
++++ b/viewer/interchange/support/support-builder.js
+@@ -0,0 +1,227 @@
++﻿/**
+
++ * support-builder.js
+
++ * Builds support specifications and canonical supports from TopoGraph + source candidates.
+
++ */
+
++
+
++import { CanonicalSupport } from '../canonical/CanonicalSupport.js';
+
++import { FidelityClass } from '../canonical/FidelityClass.js';
+
++import { getSupportMappingConfig } from './support-mapping-store.js';
+
++import { renderTemplate, withAliasedKeys, evaluatePathExpression } from '../topo/template-evaluator.js';
+
++
+
++function toFiniteNumber(value, fallback = null) {
+
++  const numeric = Number(value);
+
++  return Number.isFinite(numeric) ? numeric : fallback;
+
++}
+
++
+
++function distance(pointA, pointB) {
+
++  if (!pointA || !pointB) return Number.POSITIVE_INFINITY;
+
++  const dx = Number(pointA.x || 0) - Number(pointB.x || 0);
+
++  const dy = Number(pointA.y || 0) - Number(pointB.y || 0);
+
++  const dz = Number(pointA.z || 0) - Number(pointB.z || 0);
+
++  return Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
+
++}
+
++
+
++function normalizePoint(value) {
+
++  if (!value || typeof value !== 'object') return null;
+
++  const x = toFiniteNumber(value.x);
+
++  const y = toFiniteNumber(value.y);
+
++  const z = toFiniteNumber(value.z);
+
++  if (x === null || y === null || z === null) return null;
+
++  return { x, y, z };
+
++}
+
++
+
++function findNearestNode(nodes, point) {
+
++  let best = null;
+
++  let bestDistance = Number.POSITIVE_INFINITY;
+
++  for (const node of nodes || []) {
+
++    const nodeDistance = distance(node?.position, point);
+
++    if (nodeDistance < bestDistance) {
+
++      bestDistance = nodeDistance;
+
++      best = node;
+
++    }
+
++  }
+
++  return best ? { node: best, distance: bestDistance } : null;
+
++}
+
++
+
++function ruleMatches(rule, candidate, context) {
+
++  const match = rule?.match || {};
+
++  const typeIn = Array.isArray(match.typeIn) ? match.typeIn.map((t) => String(t).toUpperCase()) : [];
+
++  if (typeIn.length) {
+
++    const sourceType = String(candidate?.type || '').toUpperCase();
+
++    if (!typeIn.includes(sourceType)) return false;
+
++  }
+
++
+
++  const pathContains = String(match.pathContains || '').trim().toLowerCase();
+
++  if (pathContains) {
+
++    const sourcePath = String(context?.source?.path || context?.raw?.groupPath || '').toLowerCase();
+
++    if (!sourcePath.includes(pathContains)) return false;
+
++  }
+
++
+
++  const attrKey = String(match.attrKey || '').trim();
+
++  if (attrKey) {
+
++    const raw = context?.raw || {};
+
++    if (!(attrKey in raw)) return false;
+
++  }
+
++
+
++  const attrContains = String(match.attrContains || '').trim().toLowerCase();
+
++  if (attrContains) {
+
++    const attrExpr = String(match.attrExpr || `raw.${match.attrKey || ''}`).trim();
+
++    const attrValue = String(evaluatePathExpression(attrExpr, context) || '').toLowerCase();
+
++    if (!attrValue.includes(attrContains)) return false;
+
++  }
+
++
+
++  return true;
+
++}
+
++
+
++function pickRule(configBlock, candidate, context) {
+
++  const rules = Array.isArray(configBlock?.rules) ? configBlock.rules : [];
+
++  const ordered = [...rules]
+
++    .filter((rule) => rule && rule.enabled !== false)
+
++    .sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
+
++  for (const rule of ordered) {
+
++    if (ruleMatches(rule, candidate, context)) return rule;
+
++  }
+
++  return null;
+
++}
+
++
+
++function pickAnchorPoint(candidate, anchorPolicy) {
+
++  const policy = String(anchorPolicy || '').trim().toLowerCase();
+
++  if (policy === 'ep1') return normalizePoint(candidate?.ep1);
+
++  if (policy === 'ep2') return normalizePoint(candidate?.ep2);
+
++  if (policy === 'cp') return normalizePoint(candidate?.cp);
+
++  if (policy === 'bp') return normalizePoint(candidate?.bp);
+
++  if (policy === 'path') return normalizePoint(candidate?.pathAnchor);
+
++  return normalizePoint(candidate?.supportCoord)
+
++    || normalizePoint(candidate?.coOrds)
+
++    || normalizePoint(candidate?.cp)
+
++    || normalizePoint(candidate?.bp)
+
++    || normalizePoint(candidate?.ep1)
+
++    || normalizePoint(candidate?.ep2);
+
++}
+
++
+
++export function buildSupportSpecs({
+
++  format,
+
++  supportCandidates,
+
++  nodes,
+
++  assemblyId,
+
++  projectDiagnostics,
+
++}) {
+
++  const config = getSupportMappingConfig();
+
++  const formatKey = String(format || 'XML').toUpperCase();
+
++  const block = config?.formats?.[formatKey] || config?.formats?.XML || {};
+
++  const tolerances = block?.tolerances || {};
+
++  const anchorTolerance = Math.max(toFiniteNumber(tolerances.anchorMm, 0.5), 0.0001);
+
++  const mappingProfile = block?.mappingProfile || {};
+
++
+
++  const specs = [];
+
++  const supports = [];
+
++  let supportCounter = 1;
+
++
+
++  for (const candidate of supportCandidates || []) {
+
++    const raw = withAliasedKeys(candidate?.rawAttributes || {});
+
++    const context = {
+
++      raw,
+
++      source: {
+
++        id: candidate?.id,
+
++        index: candidate?.index,
+
++        type: candidate?.type,
+
++        path: candidate?.path,
+
++      },
+
++      geometry: {
+
++        ep1: candidate?.ep1,
+
++        ep2: candidate?.ep2,
+
++        cp: candidate?.cp,
+
++        bp: candidate?.bp,
+
++        supportCoord: candidate?.supportCoord,
+
++      },
+
++    };
+
++
+
++    const rule = pickRule(block, candidate, context);
+
++    const output = rule?.output || {};
+
++    const anchorPolicy = String(rule?.anchorPolicy || block?.anchorPolicy || 'nearest-node');
+
++    let anchorPoint = pickAnchorPoint(candidate, anchorPolicy);
+
++    let anchorSource = 'DIRECT';
+
++
+
++    if (!anchorPoint && anchorPolicy === 'nearest-node') {
+
++      anchorPoint = pickAnchorPoint(candidate, 'ep1') || pickAnchorPoint(candidate, 'ep2');
+
++      anchorSource = 'FALLBACK_EP';
+
++    }
+
++
+
++    const nearest = anchorPoint ? findNearestNode(nodes, anchorPoint) : null;
+
++    let hostRef = nearest?.node?.id || null;
+
++    const hostConfidence = nearest
+
++      ? Math.max(0, 1 - (nearest.distance / anchorTolerance))
+
++      : 0;
+
++
+
++    if (!hostRef) {
+
++      projectDiagnostics?.warn('SUPPORT_ANCHOR_FALLBACK', 'Support candidate could not be anchored to a node.', {
+
++        candidateId: candidate?.id || null,
+
++        anchorPolicy,
+
++      });
+
++    }
+
++
+
++    const kindTemplate = output?.supportKindTemplate || mappingProfile?.supportKindTemplate || '{{source.type || "SUPPORT"}}';
+
++    const orientationTemplate = output?.orientationTemplate || mappingProfile?.orientationTemplate || '{{raw.SUPPORT_DIRECTION || "UNKNOWN"}}';
+
++    const sizeTemplate = output?.sizeTemplate || mappingProfile?.sizeTemplate || '{{raw.SIZE || ""}}';
+
++    const refNoTemplate = output?.refNoTemplate || mappingProfile?.refNoTemplate || '{{source.id || source.index}}';
+
++    const seqNoTemplate = output?.seqNoTemplate || mappingProfile?.seqNoTemplate || '{{source.index}}';
+
++
+
++    const supportKind = renderTemplate(kindTemplate, context);
+
++    const orientation = renderTemplate(orientationTemplate, context);
+
++    const sizeText = renderTemplate(sizeTemplate, context);
+
++    const refNo = renderTemplate(refNoTemplate, context);
+
++    const seqNoRaw = renderTemplate(seqNoTemplate, context);
+
++    const seqNo = toFiniteNumber(seqNoRaw, supportCounter * 10);
+
++
+
++    const supportSpec = {
+
++      id: `SUPSPEC-${supportCounter}`,
+
++      supportKind,
+
++      anchor: {
+
++        policy: anchorPolicy,
+
++        point: anchorPoint,
+
++        nodeId: hostRef,
+
++        source: anchorSource,
+
++      },
+
++      orientation,
+
++      size: sizeText,
+
++      attrs: raw,
+
++      sourceRefs: candidate?.sourceRefs || [],
+
++      hostRefType: hostRef ? 'NODE' : 'INFERRED',
+
++      refNo,
+
++      seqNo,
+
++    };
+
++    specs.push(supportSpec);
+
++
+
++    const support = new CanonicalSupport({
+
++      id: `SUP-${supportCounter++}`,
+
++      assemblyId,
+
++      hostRefType: supportSpec.hostRefType,
+
++      hostRef,
+
++      hostRefConfidence: hostConfidence,
+
++      rawAttributes: raw,
+
++      derivedAttributes: {
+
++        anchorPolicy,
+
++        orientation,
+
++        size: sizeText,
+
++      },
+
++      normalized: {
+
++        supportCoord: anchorPoint,
+
++        supportKind,
+
++        orientation,
+
++        size: sizeText,
+
++        refNo,
+
++        seqNo,
+
++      },
+
++      directionSource: 'RULE_TEMPLATE',
+
++      classificationSource: rule ? 'RULE_MATCH' : 'DEFAULT_PROFILE',
+
++      sourceRefs: supportSpec.sourceRefs,
+
++      fidelity: FidelityClass.RECONSTRUCTED,
+
++      metadata: {
+
++        supportSpecId: supportSpec.id,
+
++      },
+
++    });
+
++    supports.push(support);
+
++  }
+
++
+
++  return { specs, supports };
+
++}
+
+
+diff --git a/viewer/interchange/view/Modelexh_PreviewRenderer.js b/viewer/interchange/view/Modelexh_PreviewRenderer.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/interchange/view/Modelexh_PreviewRenderer.js
++++ b/viewer/interchange/view/Modelexh_PreviewRenderer.js
+@@ -0,0 +1,177 @@
++﻿/**
+
++ * Modelexh_PreviewRenderer.js
+
++ * Model Exchange namespaced geometry preview canvas.
+
++ *
+
++ * This renderer is isolated from the main 3D Viewer and only visualizes
+
++ * canonical preview geometry produced by Model Exchange imports.
+
++ */
+
++
+
++import * as THREE from 'three';
+
++import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
++
+
++function _makeKey(point) {
+
++  if (!point) return '';
+
++  return `${Number(point.x).toFixed(4)}|${Number(point.y).toFixed(4)}|${Number(point.z).toFixed(4)}`;
+
++}
+
++
+
++function _collectSegmentPoints(project) {
+
++  const nodeMap = new Map((project?.nodes || []).map((node) => [node.id, node]));
+
++  const lines = [];
+
++  for (const segment of project?.segments || []) {
+
++    const from = nodeMap.get(segment.fromNodeId);
+
++    const to = nodeMap.get(segment.toNodeId);
+
++    if (!from || !to) continue;
+
++    lines.push({ from: from.position, to: to.position, segment });
+
++  }
+
++  return lines;
+
++}
+
++
+
++export class ModelexhPreviewRenderer {
+
++  constructor(container) {
+
++    this.container = container;
+
++    this.scene = new THREE.Scene();
+
++    this.scene.background = new THREE.Color(0x0d1522);
+
++
+
++    this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 10000000);
+
++    this.camera.position.set(2500, 2500, 2500);
+
++
+
++    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+
++    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
++
+
++    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+
++    this.controls.enableDamping = true;
+
++    this.controls.dampingFactor = 0.08;
+
++    this.controls.target.set(0, 0, 0);
+
++
+
++    this._group = new THREE.Group();
+
++    this.scene.add(this._group);
+
++
+
++    const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+
++    const directional = new THREE.DirectionalLight(0xffffff, 0.85);
+
++    directional.position.set(1200, 1800, 800);
+
++    this.scene.add(ambient);
+
++    this.scene.add(directional);
+
++
+
++    this.scene.add(new THREE.AxesHelper(400));
+
++
+
++    this.container.innerHTML = '';
+
++    this.container.appendChild(this.renderer.domElement);
+
++
+
++    this._raf = 0;
+
++    this._resizeObserver = new ResizeObserver(() => this.Modelexh_resize());
+
++    this._resizeObserver.observe(this.container);
+
++    this.Modelexh_resize();
+
++    this._animate = this._animate.bind(this);
+
++    this._animate();
+
++  }
+
++
+
++  Modelexh_resize() {
+
++    const width = Math.max(1, this.container.clientWidth || 1);
+
++    const height = Math.max(1, this.container.clientHeight || 1);
+
++    this.renderer.setSize(width, height);
+
++    this.camera.aspect = width / height;
+
++    this.camera.updateProjectionMatrix();
+
++  }
+
++
+
++  Modelexh_clearGroup() {
+
++    const children = [...this._group.children];
+
++    for (const child of children) {
+
++      this._group.remove(child);
+
++      if (child.geometry) child.geometry.dispose();
+
++      if (child.material) {
+
++        if (Array.isArray(child.material)) child.material.forEach((mat) => mat.dispose());
+
++        else child.material.dispose();
+
++      }
+
++    }
+
++  }
+
++
+
++  Modelexh_renderProject(project, viewState = {}) {
+
++    this.Modelexh_clearGroup();
+
++    if (!project) return;
+
++
+
++    const segmentLines = _collectSegmentPoints(project);
+
++    const supportMode = String(viewState?.supportRenderMode || 'SYMBOL').toUpperCase();
+
++    const segmentMaterial = new THREE.LineBasicMaterial({ color: 0x67c4ff });
+
++
+
++    const positionBuffer = [];
+
++    for (const line of segmentLines) {
+
++      positionBuffer.push(line.from.x, line.from.y, line.from.z);
+
++      positionBuffer.push(line.to.x, line.to.y, line.to.z);
+
++    }
+
++
+
++    if (positionBuffer.length >= 6) {
+
++      const geometry = new THREE.BufferGeometry();
+
++      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positionBuffer, 3));
+
++      const lineSegments = new THREE.LineSegments(geometry, segmentMaterial);
+
++      this._group.add(lineSegments);
+
++    }
+
++
+
++    const nodeSphere = new THREE.SphereGeometry(9, 8, 8);
+
++    const nodeMat = new THREE.MeshStandardMaterial({ color: 0x2fd16f, roughness: 0.35, metalness: 0.05 });
+
++    for (const node of project.nodes || []) {
+
++      const marker = new THREE.Mesh(nodeSphere, nodeMat);
+
++      marker.position.set(node.position.x, node.position.y, node.position.z);
+
++      this._group.add(marker);
+
++    }
+
++
+
++    const supportSphere = new THREE.SphereGeometry(14, 10, 10);
+
++    const supportMat = new THREE.MeshStandardMaterial({ color: 0xff9e2a, roughness: 0.4, metalness: 0.1 });
+
++    const supportMetaMat = new THREE.MeshStandardMaterial({ color: 0x9980ff, roughness: 0.5, metalness: 0.05 });
+
++
+
++    for (const support of project.supports || []) {
+
++      const coord = support?.normalized?.supportCoord;
+
++      if (!coord) continue;
+
++      const mesh = new THREE.Mesh(supportSphere, supportMode === 'METADATA_ONLY' ? supportMetaMat : supportMat);
+
++      mesh.position.set(coord.x, coord.y, coord.z);
+
++      if (supportMode === 'SIMPLIFIED_GEOMETRY') {
+
++        mesh.scale.set(1.2, 0.6, 1.2);
+
++      }
+
++      this._group.add(mesh);
+
++    }
+
++
+
++    const annotationBox = new THREE.BoxGeometry(22, 22, 22);
+
++    const annotationMat = new THREE.MeshStandardMaterial({ color: 0xc26dff, roughness: 0.5, metalness: 0.05 });
+
++    for (const ann of project.annotations || []) {
+
++      const anchor = ann?.normalized?.anchorPoint;
+
++      if (!anchor) continue;
+
++      const marker = new THREE.Mesh(annotationBox, annotationMat);
+
++      marker.position.set(anchor.x, anchor.y, anchor.z);
+
++      this._group.add(marker);
+
++    }
+
++
+
++    this.Modelexh_fit();
+
++  }
+
++
+
++  Modelexh_fit() {
+
++    const box = new THREE.Box3().setFromObject(this._group);
+
++    if (box.isEmpty()) return;
+
++    const center = box.getCenter(new THREE.Vector3());
+
++    const size = box.getSize(new THREE.Vector3());
+
++    const maxDim = Math.max(size.x, size.y, size.z, 1);
+
++    const distance = maxDim * 1.9;
+
++
+
++    this.controls.target.copy(center);
+
++    this.camera.position.copy(center).add(new THREE.Vector3(1, 1, 1).normalize().multiplyScalar(distance));
+
++    this.camera.near = Math.max(0.1, distance / 5000);
+
++    this.camera.far = Math.max(1000, distance * 50);
+
++    this.camera.updateProjectionMatrix();
+
++    this.controls.update();
+
++  }
+
++
+
++  _animate() {
+
++    this._raf = requestAnimationFrame(this._animate);
+
++    this.controls.update();
+
++    this.renderer.render(this.scene, this.camera);
+
++  }
+
++
+
++  destroy() {
+
++    if (this._raf) cancelAnimationFrame(this._raf);
+
++    this._raf = 0;
+
++    try { this._resizeObserver?.disconnect(); } catch {}
+
++    this.Modelexh_clearGroup();
+
++    try { this.renderer?.dispose(); } catch {}
+
++    if (this.renderer?.domElement?.parentElement === this.container) {
+
++      this.container.removeChild(this.renderer.domElement);
+
++    }
+
++  }
+
++}
+
+
+diff --git a/viewer/tabs/support-mapping-config-tab.js b/viewer/tabs/support-mapping-config-tab.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/tabs/support-mapping-config-tab.js
++++ b/viewer/tabs/support-mapping-config-tab.js
+@@ -0,0 +1,269 @@
++﻿import {
+
++  getSupportMappingConfig,
+
++  getSupportMappingConfigMeta,
+
++  loadSupportMappingConfig,
+
++  replaceSupportMappingConfig,
+
++  resetSupportMappingConfig,
+
++  subscribeSupportMappingConfig,
+
++} from '../interchange/support/support-mapping-store.js';
+
++import { validateSupportMappingConfig } from '../interchange/support/support-mapping-config.js';
+
++import { notify } from '../diagnostics/notification-center.js';
+
++import { renderIcon } from '../interchange/view/interchange-icons.js';
+
++
+
++function ensureStylesheet() {
+
++  if (document.querySelector('link[data-support-mapping-config-style="true"]')) return;
+
++  const link = document.createElement('link');
+
++  link.rel = 'stylesheet';
+
++  link.href = './tabs/support-mapping-config-tab.css';
+
++  link.dataset.supportMappingConfigStyle = 'true';
+
++  document.head.appendChild(link);
+
++}
+
++
+
++function esc(value) {
+
++  return String(value ?? '')
+
++    .replaceAll('&', '&amp;')
+
++    .replaceAll('<', '&lt;')
+
++    .replaceAll('>', '&gt;')
+
++    .replaceAll('"', '&quot;');
+
++}
+
++
+
++function cloneJson(value) {
+
++  return JSON.parse(JSON.stringify(value));
+
++}
+
++
+
++function downloadJson(fileName, payload) {
+
++  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+
++  const url = URL.createObjectURL(blob);
+
++  const anchor = document.createElement('a');
+
++  anchor.href = url;
+
++  anchor.download = fileName;
+
++  anchor.click();
+
++  URL.revokeObjectURL(url);
+
++}
+
++
+
++async function readJsonFile(file) {
+
++  const text = await file.text();
+
++  const parsed = JSON.parse(text);
+
++  return parsed;
+
++}
+
++
+
++function getBlock(config, format) {
+
++  return config?.formats?.[format] || {
+
++    topoMappingProfile: {},
+
++    mappingProfile: {},
+
++    rules: [],
+
++    anchorPolicy: 'nearest-node',
+
++    tolerances: {},
+
++    diagnostics: {},
+
++  };
+
++}
+
++
+
++function buildHtml(config, meta, format, validation, dirty) {
+
++  const block = getBlock(config, format);
+
++  return `
+
++    <div class="support-map-root">
+
++      <aside class="support-map-left">
+
++        <div class="support-map-card">
+
++          <div class="support-map-title">Support Mapping Settings</div>
+
++          <div class="support-map-subtitle">Dedicated config for support inference and anchoring in Model Exchange Topo pipeline.</div>
+
++        </div>
+
++        <div class="support-map-card">
+
++          <div>Source: <strong>${esc(meta?.source || 'default')}</strong></div>
+
++          <div>Version: <strong>${esc(meta?.version || '')}</strong></div>
+
++          <div>Format Scope: <strong>${esc(format)}</strong></div>
+
++          <div>Dirty: <strong>${dirty ? 'Yes' : 'No'}</strong></div>
+
++        </div>
+
++        <div class="support-map-card">
+
++          <div class="support-map-section-label">Validation</div>
+
++          <div class="${validation.ok ? 'ok' : 'bad'}">${validation.ok ? 'Ready' : 'Has errors'}</div>
+
++          <pre class="support-map-pre">${esc(JSON.stringify(validation, null, 2))}</pre>
+
++        </div>
+
++      </aside>
+
++      <section class="support-map-main">
+
++        <div class="support-map-toolbar">
+
++          <button data-action="apply" class="support-map-btn"><span>${renderIcon('config')}</span><span>Apply</span></button>
+
++          <button data-action="reset" class="support-map-btn"><span>${renderIcon('validate')}</span><span>Reset</span></button>
+
++          <button data-action="export" class="support-map-btn"><span>${renderIcon('export')}</span><span>Export JSON</span></button>
+
++          <label class="support-map-btn"><span>${renderIcon('import')}</span><span>Import JSON</span><input data-action="import" class="support-map-hidden" type="file" accept=".json" /></label>
+
++          <label class="support-map-label format">
+
++            <span>Format</span>
+
++            <select data-action="format">
+
++              <option value="REV" ${format === 'REV' ? 'selected' : ''}>REV</option>
+
++              <option value="JSON" ${format === 'JSON' ? 'selected' : ''}>JSON</option>
+
++              <option value="XML" ${format === 'XML' ? 'selected' : ''}>XML</option>
+
++            </select>
+
++          </label>
+
++        </div>
+
++
+
++        <div class="support-map-grid">
+
++          <div class="support-map-card">
+
++            <div class="support-map-section-label">Anchor + Tolerances</div>
+
++            <label class="support-map-label"><span>Anchor Policy</span><input data-field="anchorPolicy" value="${esc(block.anchorPolicy || 'nearest-node')}" /></label>
+
++            <label class="support-map-label"><span>Anchor Tolerance (mm)</span><input type="number" step="0.01" data-field="tolerances.anchorMm" value="${esc(block.tolerances?.anchorMm ?? 0.5)}" /></label>
+
++            <label class="support-map-label"><span>Node Merge Tolerance (mm)</span><input type="number" step="0.01" data-field="tolerances.nodeMergeMm" value="${esc(block.tolerances?.nodeMergeMm ?? 0.5)}" /></label>
+
++          </div>
+
++
+
++          <div class="support-map-card">
+
++            <div class="support-map-section-label">Diagnostics Flags</div>
+
++            <label class="support-map-check"><input type="checkbox" data-field="diagnostics.warnOnTemplateMiss" ${block.diagnostics?.warnOnTemplateMiss ? 'checked' : ''}><span>warnOnTemplateMiss</span></label>
+
++            <label class="support-map-check"><input type="checkbox" data-field="diagnostics.warnOnFallback" ${block.diagnostics?.warnOnFallback ? 'checked' : ''}><span>warnOnFallback</span></label>
+
++            <label class="support-map-check"><input type="checkbox" data-field="diagnostics.warnOnAnchorMiss" ${block.diagnostics?.warnOnAnchorMiss ? 'checked' : ''}><span>warnOnAnchorMiss</span></label>
+
++          </div>
+
++
+
++          <div class="support-map-card full">
+
++            <div class="support-map-section-label">Topo Mapping Profile (REV/JSON/XML Path+Template)</div>
+
++            <textarea data-field="topoMappingProfile" rows="10">${esc(JSON.stringify(block.topoMappingProfile || {}, null, 2))}</textarea>
+
++          </div>
+
++
+
++          <div class="support-map-card full">
+
++            <div class="support-map-section-label">Support Mapping Profile (Path+Template)</div>
+
++            <textarea data-field="mappingProfile" rows="8">${esc(JSON.stringify(block.mappingProfile || {}, null, 2))}</textarea>
+
++          </div>
+
++
+
++          <div class="support-map-card full">
+
++            <div class="support-map-section-label">Rules (Priority + Match + Output)</div>
+
++            <textarea data-field="rules" rows="12">${esc(JSON.stringify(block.rules || [], null, 2))}</textarea>
+
++          </div>
+
++        </div>
+
++      </section>
+
++    </div>
+
++  `;
+
++}
+
++
+
++function setByPath(target, path, value) {
+
++  const parts = String(path || '').split('.');
+
++  let cursor = target;
+
++  while (parts.length > 1) {
+
++    const key = parts.shift();
+
++    if (!cursor[key] || typeof cursor[key] !== 'object' || Array.isArray(cursor[key])) cursor[key] = {};
+
++    cursor = cursor[key];
+
++  }
+
++  cursor[parts[0]] = value;
+
++}
+
++
+
++function parseTextAreaJson(value, fallback) {
+
++  try {
+
++    return JSON.parse(String(value || '').trim() || JSON.stringify(fallback));
+
++  } catch {
+
++    return fallback;
+
++  }
+
++}
+
++
+
++function readDraft(container, baseline, format) {
+
++  const draft = cloneJson(baseline);
+
++  const block = getBlock(draft, format);
+
++
+
++  for (const input of container.querySelectorAll('[data-field]')) {
+
++    const field = input.dataset.field;
+
++    if (!field) continue;
+
++
+
++    if (field === 'topoMappingProfile') {
+
++      block.topoMappingProfile = parseTextAreaJson(input.value, block.topoMappingProfile || {});
+
++      continue;
+
++    }
+
++    if (field === 'mappingProfile') {
+
++      block.mappingProfile = parseTextAreaJson(input.value, block.mappingProfile || {});
+
++      continue;
+
++    }
+
++    if (field === 'rules') {
+
++      block.rules = parseTextAreaJson(input.value, block.rules || []);
+
++      continue;
+
++    }
+
++
+
++    let value;
+
++    if (input.type === 'checkbox') value = !!input.checked;
+
++    else if (input.type === 'number') value = Number(input.value);
+
++    else value = input.value;
+
++
+
++    setByPath(block, field, value);
+
++  }
+
++
+
++  draft.formats[format] = block;
+
++  return draft;
+
++}
+
++
+
++export function renderSupportMappingConfigTab(container) {
+
++  ensureStylesheet();
+
++
+
++  let format = 'REV';
+
++  let baseline = getSupportMappingConfig();
+
++  let meta = getSupportMappingConfigMeta();
+
++  let draft = cloneJson(baseline);
+
++
+
++  function render() {
+
++    const validation = validateSupportMappingConfig(draft);
+
++    const dirty = JSON.stringify(draft) !== JSON.stringify(baseline);
+
++    container.innerHTML = buildHtml(draft, meta, format, validation, dirty);
+
++
+
++    container.querySelector('[data-action="format"]')?.addEventListener('change', (event) => {
+
++      format = String(event.target.value || 'REV').toUpperCase();
+
++      render();
+
++    });
+
++
+
++    for (const input of container.querySelectorAll('[data-field]')) {
+
++      const handler = () => {
+
++        draft = readDraft(container, draft, format);
+
++      };
+
++      input.addEventListener('input', handler);
+
++      input.addEventListener('change', handler);
+
++    }
+
++
+
++    container.querySelector('[data-action="apply"]')?.addEventListener('click', () => {
+
++      try {
+
++        const latest = readDraft(container, draft, format);
+
++        const result = replaceSupportMappingConfig(latest, 'support-mapping-config-tab');
+
++        baseline = result.config;
+
++        draft = cloneJson(result.config);
+
++        meta = getSupportMappingConfigMeta();
+
++        notify({ level: 'success', title: 'Support Mapping', message: 'Support mapping config applied.' });
+
++        render();
+
++      } catch (error) {
+
++        notify({ level: 'error', title: 'Support Mapping', message: error.message, details: error });
+
++      }
+
++    });
+
++
+
++    container.querySelector('[data-action="reset"]')?.addEventListener('click', () => {
+
++      const result = resetSupportMappingConfig();
+
++      baseline = result.config;
+
++      draft = cloneJson(result.config);
+
++      meta = getSupportMappingConfigMeta();
+
++      notify({ level: 'info', title: 'Support Mapping', message: 'Defaults restored.' });
+
++      render();
+
++    });
+
++
+
++    container.querySelector('[data-action="export"]')?.addEventListener('click', () => {
+
++      downloadJson(`support-mapping-config-${Date.now()}.json`, draft);
+
++      notify({ level: 'success', title: 'Support Mapping', message: 'Config exported.' });
+
++    });
+
++
+
++    container.querySelector('[data-action="import"]')?.addEventListener('change', async (event) => {
+
++      const file = event.target.files?.[0];
+
++      if (!file) return;
+
++      try {
+
++        const parsed = await readJsonFile(file);
+
++        draft = cloneJson(parsed);
+
++        notify({ level: 'success', title: 'Support Mapping', message: `Imported ${file.name}.` });
+
++        render();
+
++      } catch (error) {
+
++        notify({ level: 'error', title: 'Support Mapping', message: `Import failed: ${error.message}`, details: error });
+
++      } finally {
+
++        event.target.value = '';
+
++      }
+
++    });
+
++  }
+
++
+
++  loadSupportMappingConfig();
+
++  baseline = getSupportMappingConfig();
+
++  meta = getSupportMappingConfigMeta();
+
++  draft = cloneJson(baseline);
+
++
+
++  const unsubscribe = subscribeSupportMappingConfig(() => {
+
++    baseline = getSupportMappingConfig();
+
++    meta = getSupportMappingConfigMeta();
+
++    draft = cloneJson(baseline);
+
++    render();
+
++  });
+
++
+
++  render();
+
++  return () => unsubscribe?.();
+
++}
+
+
+diff --git a/viewer/tabs/support-mapping-config-tab.css b/viewer/tabs/support-mapping-config-tab.css
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/tabs/support-mapping-config-tab.css
++++ b/viewer/tabs/support-mapping-config-tab.css
+@@ -0,0 +1,120 @@
++﻿.support-map-root {
+
++  display: grid;
+
++  grid-template-columns: 330px minmax(0, 1fr);
+
++  gap: 12px;
+
++  min-height: 760px;
+
++  color: #dbe5ef;
+
++}
+
++.support-map-left,
+
++.support-map-main {
+
++  display: flex;
+
++  flex-direction: column;
+
++  gap: 12px;
+
++}
+
++.support-map-card {
+
++  background: #0f1724;
+
++  border: 1px solid #2c3a4f;
+
++  border-radius: 10px;
+
++  padding: 12px;
+
++}
+
++.support-map-title {
+
++  font-size: 15px;
+
++  font-weight: 700;
+
++  color: #9cc5ff;
+
++}
+
++.support-map-subtitle {
+
++  margin-top: 8px;
+
++  color: #9cb0c8;
+
++  font-size: 12px;
+
++}
+
++.support-map-toolbar {
+
++  display: flex;
+
++  flex-wrap: wrap;
+
++  gap: 8px;
+
++  align-items: center;
+
++}
+
++.support-map-btn,
+
++.support-map-label input,
+
++.support-map-label select,
+
++.support-map-card textarea {
+
++  background: #182334;
+
++  color: #e6edf5;
+
++  border: 1px solid #31455f;
+
++  border-radius: 8px;
+
++}
+
++.support-map-btn {
+
++  padding: 8px 10px;
+
++  cursor: pointer;
+
++  display: inline-flex;
+
++  align-items: center;
+
++  gap: 8px;
+
++}
+
++.support-map-btn:hover {
+
++  background: #1e2d41;
+
++}
+
++.support-map-hidden {
+
++  display: none;
+
++}
+
++.support-map-grid {
+
++  display: grid;
+
++  grid-template-columns: repeat(2, minmax(0, 1fr));
+
++  gap: 12px;
+
++}
+
++.support-map-card.full {
+
++  grid-column: 1 / 3;
+
++}
+
++.support-map-section-label {
+
++  color: #9cc5ff;
+
++  font-weight: 700;
+
++  margin-bottom: 8px;
+
++}
+
++.support-map-label {
+
++  display: flex;
+
++  flex-direction: column;
+
++  gap: 6px;
+
++  font-size: 12px;
+
++  margin-bottom: 8px;
+
++}
+
++.support-map-label.format {
+
++  min-width: 150px;
+
++}
+
++.support-map-label input,
+
++.support-map-label select,
+
++.support-map-card textarea {
+
++  padding: 8px;
+
++}
+
++.support-map-card textarea {
+
++  width: 100%;
+
++  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+
++  white-space: pre;
+
++  overflow: auto;
+
++}
+
++.support-map-check {
+
++  display: flex;
+
++  align-items: center;
+
++  gap: 8px;
+
++  margin-bottom: 6px;
+
++}
+
++.support-map-pre {
+
++  background: #09111a;
+
++  border: 1px solid #243247;
+
++  border-radius: 8px;
+
++  padding: 10px;
+
++  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+
++  font-size: 12px;
+
++  white-space: pre-wrap;
+
++}
+
++.ok {
+
++  color: #40d17d;
+
++}
+
++.bad {
+
++  color: #ff8c8c;
+
++}
+
++@media (max-width: 1200px) {
+
++  .support-map-root {
+
++    grid-template-columns: 1fr;
+
++  }
+
++  .support-map-card.full {
+
++    grid-column: 1;
+
++  }
+
++}
+

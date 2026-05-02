@@ -65,6 +65,21 @@ export function createSectionBox(scene, renderer) {
       helper.box.copy(box);
       currentPlanes = boxToClippingPlanes(box);
       applyToHierarchy(root, currentPlanes);
+    },
+    setClipBounds: ({ minX, maxX, minY, maxY, minZ, maxZ }) => {
+      if (!enabled) return;
+      const box = new THREE.Box3(
+        new THREE.Vector3(minX, minY, minZ),
+        new THREE.Vector3(maxX, maxY, maxZ)
+      );
+      helper.box.copy(box);
+      currentPlanes = boxToClippingPlanes(box);
+      // Re-apply clipping planes to the whole scene
+      scene.traverse(obj => {
+        if (!obj.isMesh || !obj.material) return;
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        mats.forEach(mat => { mat.clippingPlanes = currentPlanes; mat.needsUpdate = true; });
+      });
     }
   };
 }

@@ -3,26 +3,59 @@ import { RvmDiagnostics } from '../rvm/RvmDiagnostics.js';
 
 export class RvmHelperBridge {
     constructor() {
-        this.endpoint = '/api/native/rvm-to-rev';
+        // Will be dynamically resolved by probe()
+        this.endpoint = null;
     }
 
     async probe() {
-        try {
-            const res = await fetch(this.endpoint, { method: 'OPTIONS' });
-            if (res.ok) {
-                return { reachable: true, version: '1.0' };
+        const candidates = [
+            'http://localhost:3001/api/native/rvm-to-rev',
+            'http://localhost:3000/api/native/rvm-to-rev',
+            'http://localhost:3200/api/native/rvm-to-rev',
+            'http://127.0.0.1:3001/api/native/rvm-to-rev',
+            'http://127.0.0.1:3000/api/native/rvm-to-rev',
+            'http://127.0.0.1:3200/api/native/rvm-to-rev'
+        ];
+
+        for (const url of candidates) {
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    cache: 'no-store',
+                    body: JSON.stringify({ mode: 'probe' }),
+                });
+                if (res.status === 404 || res.status === 405) {
+                    continue;
+                }
+                if (res.ok || res.status === 400 || res.status === 422) {
+                    this.endpoint = url; // Lock in the discovered endpoint
+                    console.log(`[RvmHelperBridge] Found active local backend at: ${url}`);
+                    return { reachable: true, version: '1.0' };
+                }
+            } catch (e) {
+                // Ignore connection refused errors and try the next candidate
             }
-            return { reachable: false };
-        } catch (e) {
-            return { reachable: false };
         }
+        this.endpoint = null;
+        return { reachable: false };
     }
 
     /**
      * Re-uses the static loader after successful conversion
      */
     async convertAndLoad(input, ctx, asyncSession) {
-        if (!input.file) throw new Error("No RVM file provided");
+        if (!input.file) throw new Error("No RVM/REV file provided");
+        if (!this.endpoint) {
+            const probeResult = await this.probe();
+            if (!probeResult?.reachable || !this.endpoint) {
+                throw new Error("Native RVM bridge is not reachable. Start local server (node test_server.js) before importing raw RVM.");
+            }
+        }
+        const inputName = String(input.file.name || '').toLowerCase();
+        if (!inputName.endsWith('.rvm') && !inputName.endsWith('.rev')) {
+            throw new Error(`Unsupported input file "${input.file.name}". Native bridge accepts .rvm or .rev files.`);
+        }
 
         asyncSession.update('manifest', 5);
 
@@ -51,6 +84,7 @@ export class RvmHelperBridge {
             return await ctx.staticBundleLoader.load({
                 schemaVersion: 'rvm-bundle/v1',
                 bundleId: cached.bundleId,
+                runtime: { units: 'mm', upAxis: 'Y', scale: 1, originOffset: [0, 0, 0] },
                 artifacts: {
                     glb: cached.glbPath,
                     index: cached.indexPath

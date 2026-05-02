@@ -1,0 +1,53 @@
+{
+  "version": "1.0.0",
+  "anchors": [
+    {
+      "path": "viewer/interchange/source/adapter-registry.js",
+      "mustContain": [
+        "RevImportAdapter",
+        "GenericJsonImportAdapter",
+        "CaesarXmlImportAdapter"
+      ]
+    },
+    {
+      "path": "viewer/tabs/model-exchange-tab.js",
+      "mustContain": [
+        "ModelexhPreviewRenderer",
+        "data-role=\"modelexh-preview\"",
+        "open-support-config"
+      ]
+    },
+    {
+      "path": "viewer/interchange/topo/topo-builder.js",
+      "mustContain": [
+        "TopoGraph",
+        "buildCanonicalProjectFromTopoSource",
+        "buildSupportSpecs"
+      ]
+    },
+    {
+      "path": "viewer/interchange/support/support-builder.js",
+      "mustContain": [
+        "SupportSpec",
+        "buildSupportSpecs",
+        "SUPPORT_ANCHOR_FALLBACK"
+      ]
+    },
+    {
+      "path": "viewer/converters/scripts/rvm_attribute_to_xml_to_cii.py",
+      "mustContain": [
+        "deprecated",
+        "rvm_attribute_to_xml.py",
+        "XML-only"
+      ]
+    },
+    {
+      "path": "viewer/tabs/model-converters-tab.js",
+      "mustContain": [
+        "3DModelConv Geometry Preview",
+        "ModelConverters_3DModelConv_PreviewRenderer",
+        "_3DModelConv_renderPreviewFromOutputs"
+      ]
+    }
+  ]
+}

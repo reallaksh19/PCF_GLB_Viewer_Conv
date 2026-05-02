@@ -1,0 +1,1190 @@
+diff --git a/viewer/tabs/model-converters-tab.js b/viewer/tabs/model-converters-tab.js
+index 1111111..2222222 100644
+--- a/viewer/tabs/model-converters-tab.js
++++ b/viewer/tabs/model-converters-tab.js
+@@ -1,6 +1,8 @@
+ import { emit } from '../core/event-bus.js';
+
+ import { RuntimeEvents } from '../contracts/runtime-events.js';
+
+ import { notify } from '../diagnostics/notification-center.js';
+
++import { pickImportAdapter } from '../interchange/source/adapter-registry.js';
+
++import { ModelConverters_3DModelConv_PreviewRenderer } from '../converters/view/3DModelConv_PreviewRenderer.js';
+
+ import {
+
+   buildConverterWorkerRequest,
+
+   validateConverterWorkerResponse,
+
+@@ -431,6 +433,64 @@
+   return 'first';
+
+ }
+
+ 
+
++function _3DModelConv_buildPreviewMetaText(project, outputName, adapterName) {
+
++  const segmentCount = Array.isArray(project?.segments) ? project.segments.length : 0;
+
++  const nodeCount = Array.isArray(project?.nodes) ? project.nodes.length : 0;
+
++  const supportCount = Array.isArray(project?.supports) ? project.supports.length : 0;
+
++  const annotationCount = Array.isArray(project?.annotations) ? project.annotations.length : 0;
+
++  return `Preview source: ${outputName} | adapter: ${adapterName} | segments: ${segmentCount} | nodes: ${nodeCount} | supports: ${supportCount} | annotations: ${annotationCount}`;
+
++}
+
++
+
++async function _3DModelConv_tryBuildProjectFromOutput(output) {
+
++  const name = _toText(output?.name).trim();
+
++  const text = _toText(output?.text);
+
++  if (!name || !text) {
+
++    return { ok: false, reason: 'Output has no text payload for preview.' };
+
++  }
+
++
+
++  try {
+
++    const match = pickImportAdapter({ name, text, payload: null });
+
++    const adapter = new match.Adapter();
+
++    const imported = await adapter.import({
+
++      id: `3dmodelconv-preview-${Date.now()}`,
+
++      name,
+
++      text,
+
++      payload: null,
+
++    });
+
++    const project = imported?.project || null;
+
++    if (!project) {
+
++      return { ok: false, reason: `Adapter ${adapter.constructor.name} returned no project.` };
+
++    }
+
++    const hasGeometry = Array.isArray(project?.segments) && project.segments.length > 0;
+
++    if (!hasGeometry) {
+
++      return { ok: false, reason: `Adapter ${adapter.constructor.name} produced no segments.` };
+
++    }
+
++    return {
+
++      ok: true,
+
++      project,
+
++      adapterName: adapter.constructor.name,
+
++      outputName: name,
+
++    };
+
++  } catch (error) {
+
++    return { ok: false, reason: _toText(error?.message || error) };
+
++  }
+
++}
+
++
+
++async function _3DModelConv_buildPreviewFromOutputs(outputs) {
+
++  const normalized = Array.isArray(outputs) ? outputs.filter((entry) => entry && entry.name) : [];
+
++  if (!normalized.length) {
+
++    return { ok: false, reason: 'No outputs available to preview.' };
+
++  }
+
++
+
++  let lastReason = 'No previewable output found.';
+
++  for (const output of normalized) {
+
++    const result = await _3DModelConv_tryBuildProjectFromOutput(output);
+
++    if (result.ok) return result;
+
++    lastReason = result.reason || lastReason;
+
++  }
+
++  return { ok: false, reason: lastReason };
+
++}
+
++
+
+ function _mergeStageLogs(stages) {
+
+   const stdout = [];
+
+   const stderr = [];
+
+@@ -754,6 +814,11 @@
+           <div class="model-converters-card-title">Output</div>
+
+           <div id="model-converters-output"></div>
+
+         </div>
+
++        <div class="model-converters-card model-converters-preview-card">
+
++          <div class="model-converters-card-title">3DModelConv Geometry Preview</div>
+
++          <div id="model-converters-preview-host" class="model-converters-preview-host"></div>
+
++          <div id="model-converters-preview-meta" class="model-converters-preview-meta">Preview not available yet.</div>
+
++        </div>
+
+         <div class="model-converters-card">
+
+           <div class="model-converters-card-title">Logs</div>
+
+           <pre id="model-converters-logs" class="model-converters-logs">(no logs)</pre>
+
+@@ -775,6 +840,18 @@
+   const statusEl = container.querySelector('#model-converters-status');
+
+   const outputEl = container.querySelector('#model-converters-output');
+
+   const logsEl = container.querySelector('#model-converters-logs');
+
++  const previewHostEl = container.querySelector('#model-converters-preview-host');
+
++  const previewMetaEl = container.querySelector('#model-converters-preview-meta');
+
++
+
++  let previewRenderer = null;
+
++
+
++  if (previewHostEl) {
+
++    try {
+
++      previewRenderer = new ModelConverters_3DModelConv_PreviewRenderer(previewHostEl);
+
++    } catch (error) {
+
++      previewMetaEl.textContent = `Preview renderer init failed: ${_toText(error?.message || error)}`;
+
++    }
+
++  }
+
+ 
+
+   function activeDef() {
+
+     return CONVERTER_DEFS[selectedConverter];
+
+@@ -799,6 +876,39 @@
+   function setLogs(lines) {
+
+     const normalized = Array.isArray(lines) ? lines : [];
+
+     logsEl.textContent = normalized.length ? normalized.join('\n') : '(no logs)';
+
++  }
+
++
+
++  function _3DModelConv_setPreviewMeta(text) {
+
++    previewMetaEl.textContent = _toText(text);
+
++  }
+
++
+
++  function _3DModelConv_resetPreview(text) {
+
++    if (previewRenderer) {
+
++      try { previewRenderer._3DModelConv_renderProject(null); } catch {}
+
++    }
+
++    _3DModelConv_setPreviewMeta(text);
+
++  }
+
++
+
++  async function _3DModelConv_renderPreviewFromOutputs(outputs) {
+
++    if (!previewRenderer) {
+
++      _3DModelConv_setPreviewMeta('Preview renderer is not initialized.');
+
++      return;
+
++    }
+
++    _3DModelConv_setPreviewMeta('Building 3D topo preview...');
+
++    const previewResult = await _3DModelConv_buildPreviewFromOutputs(outputs);
+
++    if (!previewResult.ok) {
+
++      previewRenderer._3DModelConv_renderProject(null);
+
++      _3DModelConv_setPreviewMeta(`Preview unavailable: ${previewResult.reason}`);
+
++      return;
+
++    }
+
++    previewRenderer._3DModelConv_renderProject(previewResult.project);
+
++    _3DModelConv_setPreviewMeta(
+
++      _3DModelConv_buildPreviewMetaText(
+
++        previewResult.project,
+
++        previewResult.outputName,
+
++        previewResult.adapterName,
+
++      ),
+
++    );
+
+   }
+
+ 
+
+   function renderOutputs(outputs) {
+
+@@ -859,6 +969,7 @@
+   function resetOutput() {
+
+     outputEl.innerHTML = '<span class="model-converters-muted">No output generated yet.</span>';
+
+     setLogs([]);
+
++    _3DModelConv_resetPreview('Preview not available yet.');
+
+   }
+
+ 
+
+   function renderAll() {
+
+@@ -901,6 +1012,7 @@
+     setStatus('Running converter...', 'running');
+
+     setLogs([]);
+
+     outputEl.innerHTML = '<span class="model-converters-muted">Working...</span>';
+
++    _3DModelConv_resetPreview('Running conversion...');
+
+     emit(RuntimeEvents.MODEL_CONVERTER_START, { converterId: selectedConverter, input: primaryFile.name });
+
+ 
+
+     try {
+
+@@ -942,6 +1054,7 @@
+       if (!output) throw new Error('Converter returned no output payload.');
+
+ 
+
+       renderOutputs(outputs);
+
++      await _3DModelConv_renderPreviewFromOutputs(outputs);
+
+ 
+
+       const logLines = []
+
+         .concat(response.logs?.stdout || [])
+
+@@ -955,6 +1068,7 @@
+       setStatus(`Failed: ${message}`, 'bad');
+
+       outputEl.innerHTML = '<span class="model-converters-muted">No output generated.</span>';
+
+       setLogs([message]);
+
++      _3DModelConv_resetPreview(`Preview unavailable: ${message}`);
+
+       notify({ level: 'error', title: 'Converter', message });
+
+       emit(RuntimeEvents.MODEL_CONVERTER_ERROR, { converterId: selectedConverter, error: message });
+
+     } finally {
+
+@@ -968,5 +1082,6 @@
+   return () => {
+
+     disposed = true;
+
+     try { runtime?.dispose(); } catch {}
+
++    try { previewRenderer?._3DModelConv_destroy?.(); } catch {}
+
+   };
+
+ }
+
+
+diff --git a/viewer/tabs/model-converters-tab.css b/viewer/tabs/model-converters-tab.css
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/tabs/model-converters-tab.css
++++ b/viewer/tabs/model-converters-tab.css
+@@ -0,0 +1,186 @@
++.model-converters-root {
+
++  display: grid;
+
++  grid-template-columns: 380px minmax(0, 1fr);
+
++  gap: 12px;
+
++  height: 100%;
+
++  min-height: 760px;
+
++  color: #dbe5ef;
+
++}
+
++
+
++.model-converters-left,
+
++.model-converters-card {
+
++  background: #0f1724;
+
++  border: 1px solid #2c3a4f;
+
++  border-radius: 10px;
+
++  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+
++}
+
++
+
++.model-converters-left {
+
++  padding: 14px;
+
++  display: flex;
+
++  flex-direction: column;
+
++  gap: 12px;
+
++}
+
++
+
++.model-converters-left h2 {
+
++  margin: 0;
+
++  color: #9cc5ff;
+
++}
+
++
+
++.model-converters-subtitle {
+
++  margin: 0;
+
++  font-size: 13px;
+
++  color: #9aa8ba;
+
++}
+
++
+
++.model-converters-label,
+
++.model-converters-file {
+
++  display: flex;
+
++  flex-direction: column;
+
++  gap: 6px;
+
++  font-size: 13px;
+
++}
+
++
+
++.model-converters-label input,
+
++.model-converters-label select,
+
++.model-converters-file input {
+
++  background: #182334;
+
++  color: #e6edf5;
+
++  border: 1px solid #31455f;
+
++  border-radius: 8px;
+
++  padding: 8px 10px;
+
++}
+
++
+
++.model-converters-file small {
+
++  color: #9aa8ba;
+
++}
+
++
+
++.model-converters-advanced {
+
++  border: 1px solid #2c3a4f;
+
++  border-radius: 8px;
+
++  padding: 8px;
+
++  background: #111c2c;
+
++}
+
++
+
++.model-converters-advanced summary {
+
++  cursor: pointer;
+
++  color: #9cc5ff;
+
++}
+
++
+
++.model-converters-advanced-fields {
+
++  display: grid;
+
++  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+
++  gap: 10px;
+
++  margin-top: 10px;
+
++}
+
++
+
++.model-converters-checkbox {
+
++  display: inline-flex;
+
++  align-items: center;
+
++  gap: 8px;
+
++  font-size: 13px;
+
++}
+
++
+
++.model-converters-run-btn,
+
++.model-converters-download-btn {
+
++  background: #1f7ae0;
+
++  color: #ffffff;
+
++  border: none;
+
++  border-radius: 8px;
+
++  padding: 10px 12px;
+
++  cursor: pointer;
+
++  font-weight: 600;
+
++}
+
++
+
++.model-converters-run-btn:disabled {
+
++  opacity: 0.6;
+
++  cursor: not-allowed;
+
++}
+
++
+
++.model-converters-right {
+
++  display: grid;
+
++  grid-template-rows: auto auto minmax(340px, 1fr) 1fr;
+
++  gap: 12px;
+
++}
+
++
+
++.model-converters-card {
+
++  padding: 12px;
+
++}
+
++
+
++.model-converters-card-title {
+
++  color: #9cc5ff;
+
++  font-weight: 700;
+
++  margin-bottom: 8px;
+
++}
+
++
+
++.model-converters-status {
+
++  color: #dbe5ef;
+
++}
+
++
+
++.model-converters-status.ok {
+
++  color: #58d68d;
+
++}
+
++
+
++.model-converters-status.bad {
+
++  color: #ff8585;
+
++}
+
++
+
++.model-converters-status.running {
+
++  color: #f5c96a;
+
++}
+
++
+
++.model-converters-output-row {
+
++  display: flex;
+
++  justify-content: space-between;
+
++  align-items: center;
+
++  gap: 10px;
+
++}
+
++
+
++.model-converters-logs {
+
++  margin: 0;
+
++  background: #09111a;
+
++  border: 1px solid #243247;
+
++  border-radius: 8px;
+
++  padding: 10px;
+
++  font-size: 12px;
+
++  white-space: pre-wrap;
+
++  max-height: 420px;
+
++  overflow: auto;
+
++}
+
++
+
++.model-converters-muted {
+
++  color: #9aa8ba;
+
++}
+
++
+
++.model-converters-preview-card {
+
++  display: flex;
+
++  flex-direction: column;
+
++  gap: 10px;
+
++}
+
++
+
++.model-converters-preview-host {
+
++  width: 100%;
+
++  height: 320px;
+
++  border: 1px solid #243247;
+
++  border-radius: 10px;
+
++  overflow: hidden;
+
++  background: radial-gradient(circle at top, rgba(49, 81, 123, 0.2), rgba(10, 18, 30, 0.9));
+
++}
+
++
+
++.model-converters-preview-host canvas {
+
++  display: block;
+
++  width: 100% !important;
+
++  height: 100% !important;
+
++}
+
++
+
++.model-converters-preview-meta {
+
++  font-size: 12px;
+
++  color: #9aa8ba;
+
++  line-height: 1.4;
+
++}
+
++
+
++@media (max-width: 1200px) {
+
++  .model-converters-root {
+
++    grid-template-columns: 1fr;
+
++  }
+
++}
+
+
+diff --git a/viewer/converters/view/3DModelConv_PreviewRenderer.js b/viewer/converters/view/3DModelConv_PreviewRenderer.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/converters/view/3DModelConv_PreviewRenderer.js
++++ b/viewer/converters/view/3DModelConv_PreviewRenderer.js
+@@ -0,0 +1,221 @@
++/**
+
++ * 3DModelConv_PreviewRenderer.js
+
++ * Dedicated 3D canvas renderer for the "3D Model Converters" tab.
+
++ *
+
++ * Functionality:
+
++ * - Render canonical project geometry (segments, nodes, supports, annotations).
+
++ * - Keep rendering isolated from Model Exchange and 3D Viewer tabs.
+
++ * - Handle resize and scene cleanup safely between conversion runs.
+
++ */
+
++
+
++import * as THREE from 'three';
+
++import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
++
+
++function _3DModelConv_toNumber(value) {
+
++  const numeric = Number(value);
+
++  return Number.isFinite(numeric) ? numeric : 0;
+
++}
+
++
+
++function _3DModelConv_makeVec3(point) {
+
++  return new THREE.Vector3(
+
++    _3DModelConv_toNumber(point?.x),
+
++    _3DModelConv_toNumber(point?.y),
+
++    _3DModelConv_toNumber(point?.z),
+
++  );
+
++}
+
++
+
++function _3DModelConv_pointFromNode(node) {
+
++  if (node?.position) return node.position;
+
++  if (node?.normalized?.position) return node.normalized.position;
+
++  return null;
+
++}
+
++
+
++function _3DModelConv_collectSegmentEndpoints(project) {
+
++  const nodeMap = new Map();
+
++  for (const node of project?.nodes || []) {
+
++    if (!node?.id) continue;
+
++    nodeMap.set(node.id, node);
+
++  }
+
++
+
++  const endpoints = [];
+
++  for (const segment of project?.segments || []) {
+
++    const ep1FromNormalized = segment?.normalized?.ep1 || null;
+
++    const ep2FromNormalized = segment?.normalized?.ep2 || null;
+
++
+
++    let ep1 = ep1FromNormalized;
+
++    let ep2 = ep2FromNormalized;
+
++
+
++    if (!ep1) {
+
++      const fromNode = nodeMap.get(segment?.fromNodeId || segment?.startNodeId || segment?.nodeStartId);
+
++      ep1 = _3DModelConv_pointFromNode(fromNode);
+
++    }
+
++    if (!ep2) {
+
++      const toNode = nodeMap.get(segment?.toNodeId || segment?.endNodeId || segment?.nodeEndId);
+
++      ep2 = _3DModelConv_pointFromNode(toNode);
+
++    }
+
++
+
++    if (!ep1 || !ep2) continue;
+
++    endpoints.push({ ep1, ep2 });
+
++  }
+
++  return endpoints;
+
++}
+
++
+
++function _3DModelConv_disposeMaterial(material) {
+
++  if (!material) return;
+
++  if (Array.isArray(material)) {
+
++    for (const item of material) {
+
++      try { item?.dispose?.(); } catch {}
+
++    }
+
++    return;
+
++  }
+
++  try { material.dispose(); } catch {}
+
++}
+
++
+
++export class ModelConverters_3DModelConv_PreviewRenderer {
+
++  constructor(container) {
+
++    this.container = container;
+
++    this.scene = new THREE.Scene();
+
++    this.scene.background = new THREE.Color(0x0d1522);
+
++
+
++    this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 10000000);
+
++    this.camera.position.set(2600, 2200, 2600);
+
++
+
++    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+
++    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
++    this.renderer.setSize(1, 1);
+
++    if ('outputColorSpace' in this.renderer) {
+
++      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+
++    }
+
++
+
++    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+
++    this.controls.enableDamping = true;
+
++    this.controls.dampingFactor = 0.08;
+
++    this.controls.target.set(0, 0, 0);
+
++
+
++    this._3DModelConv_group = new THREE.Group();
+
++    this.scene.add(this._3DModelConv_group);
+
++
+
++    const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+
++    const directional = new THREE.DirectionalLight(0xffffff, 0.85);
+
++    directional.position.set(1400, 1800, 800);
+
++    this.scene.add(ambient);
+
++    this.scene.add(directional);
+
++
+
++    const grid = new THREE.GridHelper(8000, 80, 0x35557a, 0x1c2f45);
+
++    grid.position.set(0, 0, 0);
+
++    this.scene.add(grid);
+
++    this.scene.add(new THREE.AxesHelper(450));
+
++
+
++    this.container.innerHTML = '';
+
++    this.container.appendChild(this.renderer.domElement);
+
++
+
++    this._3DModelConv_raf = 0;
+
++    this._3DModelConv_resizeObserver = new ResizeObserver(() => this._3DModelConv_resize());
+
++    this._3DModelConv_resizeObserver.observe(this.container);
+
++    this._3DModelConv_resize();
+
++
+
++    this._3DModelConv_animate = this._3DModelConv_animate.bind(this);
+
++    this._3DModelConv_animate();
+
++  }
+
++
+
++  _3DModelConv_resize() {
+
++    const width = Math.max(1, this.container.clientWidth || 1);
+
++    const height = Math.max(1, this.container.clientHeight || 1);
+
++    this.renderer.setSize(width, height);
+
++    this.camera.aspect = width / height;
+
++    this.camera.updateProjectionMatrix();
+
++  }
+
++
+
++  _3DModelConv_clear() {
+
++    const children = [...this._3DModelConv_group.children];
+
++    for (const child of children) {
+
++      this._3DModelConv_group.remove(child);
+
++      try { child.geometry?.dispose?.(); } catch {}
+
++      _3DModelConv_disposeMaterial(child.material);
+
++    }
+
++  }
+
++
+
++  _3DModelConv_renderProject(project) {
+
++    this._3DModelConv_clear();
+
++    if (!project) return;
+
++
+
++    const endpoints = _3DModelConv_collectSegmentEndpoints(project);
+
++    if (endpoints.length > 0) {
+
++      const segmentMaterial = new THREE.LineBasicMaterial({ color: 0x67c4ff });
+
++      const positions = [];
+
++      for (const pair of endpoints) {
+
++        positions.push(_3DModelConv_toNumber(pair.ep1.x), _3DModelConv_toNumber(pair.ep1.y), _3DModelConv_toNumber(pair.ep1.z));
+
++        positions.push(_3DModelConv_toNumber(pair.ep2.x), _3DModelConv_toNumber(pair.ep2.y), _3DModelConv_toNumber(pair.ep2.z));
+
++      }
+
++      const geometry = new THREE.BufferGeometry();
+
++      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
++      this._3DModelConv_group.add(new THREE.LineSegments(geometry, segmentMaterial));
+
++    }
+
++
+
++    const nodeGeometry = new THREE.SphereGeometry(8, 8, 8);
+
++    const nodeMaterial = new THREE.MeshStandardMaterial({ color: 0x42d27a, roughness: 0.35, metalness: 0.05 });
+
++    for (const node of project?.nodes || []) {
+
++      const point = _3DModelConv_pointFromNode(node);
+
++      if (!point) continue;
+
++      const marker = new THREE.Mesh(nodeGeometry, nodeMaterial);
+
++      marker.position.copy(_3DModelConv_makeVec3(point));
+
++      this._3DModelConv_group.add(marker);
+
++    }
+
++
+
++    const supportGeometry = new THREE.SphereGeometry(12, 10, 10);
+
++    const supportMaterial = new THREE.MeshStandardMaterial({ color: 0xffa53a, roughness: 0.42, metalness: 0.08 });
+
++    for (const support of project?.supports || []) {
+
++      const point = support?.normalized?.supportCoord;
+
++      if (!point) continue;
+
++      const marker = new THREE.Mesh(supportGeometry, supportMaterial);
+
++      marker.position.copy(_3DModelConv_makeVec3(point));
+
++      this._3DModelConv_group.add(marker);
+
++    }
+
++
+
++    const annotationGeometry = new THREE.BoxGeometry(16, 16, 16);
+
++    const annotationMaterial = new THREE.MeshStandardMaterial({ color: 0xc685ff, roughness: 0.5, metalness: 0.05 });
+
++    for (const annotation of project?.annotations || []) {
+
++      const point = annotation?.normalized?.anchorPoint;
+
++      if (!point) continue;
+
++      const marker = new THREE.Mesh(annotationGeometry, annotationMaterial);
+
++      marker.position.copy(_3DModelConv_makeVec3(point));
+
++      this._3DModelConv_group.add(marker);
+
++    }
+
++
+
++    this._3DModelConv_fit();
+
++  }
+
++
+
++  _3DModelConv_fit() {
+
++    const box = new THREE.Box3().setFromObject(this._3DModelConv_group);
+
++    if (box.isEmpty()) return;
+
++    const center = box.getCenter(new THREE.Vector3());
+
++    const size = box.getSize(new THREE.Vector3());
+
++    const maxDim = Math.max(size.x, size.y, size.z, 1);
+
++    const distance = maxDim * 1.95;
+
++
+
++    this.controls.target.copy(center);
+
++    this.camera.position.copy(center).add(new THREE.Vector3(1, 1, 1).normalize().multiplyScalar(distance));
+
++    this.camera.near = Math.max(0.1, distance / 5000);
+
++    this.camera.far = Math.max(1000, distance * 60);
+
++    this.camera.updateProjectionMatrix();
+
++    this.controls.update();
+
++  }
+
++
+
++  _3DModelConv_animate() {
+
++    this._3DModelConv_raf = requestAnimationFrame(this._3DModelConv_animate);
+
++    this.controls.update();
+
++    this.renderer.render(this.scene, this.camera);
+
++  }
+
++
+
++  _3DModelConv_destroy() {
+
++    if (this._3DModelConv_raf) cancelAnimationFrame(this._3DModelConv_raf);
+
++    this._3DModelConv_raf = 0;
+
++    try { this._3DModelConv_resizeObserver?.disconnect(); } catch {}
+
++    this._3DModelConv_clear();
+
++    try { this.renderer?.dispose?.(); } catch {}
+
++    if (this.renderer?.domElement?.parentElement === this.container) {
+
++      this.container.removeChild(this.renderer.domElement);
+
++    }
+
++  }
+
++}
+
++
+

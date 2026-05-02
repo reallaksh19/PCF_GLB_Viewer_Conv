@@ -1,0 +1,443 @@
+diff --git a/viewer/tests/unit/interchange/adapter-registry.test.js b/viewer/tests/unit/interchange/adapter-registry.test.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/tests/unit/interchange/adapter-registry.test.js
++++ b/viewer/tests/unit/interchange/adapter-registry.test.js
+@@ -0,0 +1,64 @@
++﻿import { pickImportAdapter } from '../../../interchange/source/adapter-registry.js';
+
++import { CaesarXmlImportAdapter } from '../../../interchange/source/xml/CaesarXmlImportAdapter.js';
+
++import { NeutralXmlImportAdapter } from '../../../interchange/source/xml/NeutralXmlImportAdapter.js';
+
++import { RevImportAdapter } from '../../../interchange/source/rev/RevImportAdapter.js';
+
++import { PcfImportAdapter } from '../../../interchange/source/pcf/PcfImportAdapter.js';
+
++import { GenericJsonImportAdapter } from '../../../interchange/source/json/GenericJsonImportAdapter.js';
+
++
+
++function runTests() {
+
++  let passed = true;
+
++
+
++  const mockXmlText = '<PIPINGMODEL><PIPINGELEMENT FROM_NODE="10" TO_NODE="20" DELTA_X="1" DELTA_Y="0" DELTA_Z="0"></PIPINGELEMENT></PIPINGMODEL>';
+
++  const matchXml = pickImportAdapter({ name: 'test.xml', text: mockXmlText });
+
++  if (matchXml.Adapter !== CaesarXmlImportAdapter) {
+
++    console.error('Test 1 Failed: Expected CaesarXmlImportAdapter');
+
++    passed = false;
+
++  }
+
++
+
++  const neutralXmlText = '<Model><Components></Components></Model>';
+
++  const matchNeutral = pickImportAdapter({ name: 'test.xml', text: neutralXmlText });
+
++  if (matchNeutral.Adapter !== NeutralXmlImportAdapter) {
+
++    console.error('Test 2 Failed: Expected NeutralXmlImportAdapter');
+
++    passed = false;
+
++  }
+
++
+
++  const revText = 'HEAD\ninfo\nnote\ndate\nuser\nMODL\nProject\nPRIM\n2\n1 0 0 0\n0 1 0 0\n0 0 1 0\n0 0 0\n100 10 10\nEND:\n';
+
++  const matchRev = pickImportAdapter({ name: 'demo.rev', text: revText });
+
++  if (matchRev.Adapter !== RevImportAdapter) {
+
++    console.error('Test 3 Failed: Expected RevImportAdapter');
+
++    passed = false;
+
++  }
+
++
+
++  const pcfText = 'PIPE\n    END-POINT 0 0 0 100\n    END-POINT 100 0 0 100\n';
+
++  const matchPcf = pickImportAdapter({ name: 'demo.pcf', text: pcfText });
+
++  if (matchPcf.Adapter !== PcfImportAdapter) {
+
++    console.error('Test 4 Failed: Expected PcfImportAdapter');
+
++    passed = false;
+
++  }
+
++
+
++  const jsonText = '{"items":[{"ep1":{"x":0,"y":0,"z":0},"ep2":{"x":1,"y":0,"z":0},"type":"PIPE"}]}' ;
+
++  const matchJson = pickImportAdapter({ name: 'demo.json', text: jsonText });
+
++  if (matchJson.Adapter !== GenericJsonImportAdapter) {
+
++    console.error('Test 5 Failed: Expected GenericJsonImportAdapter');
+
++    passed = false;
+
++  }
+
++
+
++  let unknownRejected = false;
+
++  try {
+
++    pickImportAdapter({ name: 'notes.txt', text: 'just text' });
+
++  } catch {
+
++    unknownRejected = true;
+
++  }
+
++  if (!unknownRejected) {
+
++    console.error('Test 6 Failed: unknown input should throw no-adapter error.');
+
++    passed = false;
+
++  }
+
++
+
++  if (passed) {
+
++    console.log('\u2705 Adapter registry tests passed.');
+
++  } else {
+
++    process.exit(1);
+
++  }
+
++}
+
++
+
++runTests();
+
+
+diff --git a/viewer/tests/unit/interchange/support-mapping-config.test.js b/viewer/tests/unit/interchange/support-mapping-config.test.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/tests/unit/interchange/support-mapping-config.test.js
++++ b/viewer/tests/unit/interchange/support-mapping-config.test.js
+@@ -0,0 +1,45 @@
++﻿import {
+
++  cloneDefaultSupportMappingConfig,
+
++  normalizeSupportMappingConfig,
+
++  validateSupportMappingConfig,
+
++} from '../../../interchange/support/support-mapping-config.js';
+
++
+
++function runTests() {
+
++  let passed = true;
+
++
+
++  const defaults = cloneDefaultSupportMappingConfig();
+
++  const validation = validateSupportMappingConfig(defaults);
+
++  if (!validation.ok) {
+
++    console.error('Test 1 Failed: default support mapping config must validate.');
+
++    passed = false;
+
++  }
+
++
+
++  const custom = cloneDefaultSupportMappingConfig();
+
++  custom.formats.REV.rules.push({
+
++    id: 'rev-pipesupp',
+
++    enabled: true,
+
++    priority: 200,
+
++    match: { pathContains: 'PIPESUPP', typeIn: ['SUPPORT'] },
+
++    output: { supportKindTemplate: '{{raw.groupPath || "SUPPORT"}}' },
+
++    anchorPolicy: 'nearest-node',
+
++  });
+
++
+
++  const normalized = normalizeSupportMappingConfig(custom);
+
++  if (!normalized.validation.ok) {
+
++    console.error('Test 2 Failed: normalized custom config should validate.');
+
++    passed = false;
+
++  }
+
++
+
++  const broken = cloneDefaultSupportMappingConfig();
+
++  broken.formats.XML.tolerances.anchorMm = 0;
+
++  const brokenValidation = validateSupportMappingConfig(broken);
+
++  if (brokenValidation.ok) {
+
++    console.error('Test 3 Failed: invalid tolerance should fail validation.');
+
++    passed = false;
+
++  }
+
++
+
++  if (passed) console.log('\u2705 Support mapping config tests passed.');
+
++  else process.exit(1);
+
++}
+
++
+
++runTests();
+
+
+diff --git a/viewer/tests/integration/model-exchange-ui.test.js b/viewer/tests/integration/model-exchange-ui.test.js
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/tests/integration/model-exchange-ui.test.js
++++ b/viewer/tests/integration/model-exchange-ui.test.js
+@@ -0,0 +1,48 @@
++﻿import fs from 'fs';
+
++import path from 'path';
+
++import { fileURLToPath } from 'url';
+
++
+
++const __filename = fileURLToPath(import.meta.url);
+
++const __dirname = path.dirname(__filename);
+
++
+
++function runTests() {
+
++  let passed = true;
+
++
+
++  const uiPath = path.join(__dirname, '../../tabs/model-exchange-tab.js');
+
++  const uiContent = fs.readFileSync(uiPath, 'utf8');
+
++
+
++  if (uiContent.includes('alert(')) {
+
++    console.error('Failed: Found alert() in model-exchange-tab.js');
+
++    passed = false;
+
++  }
+
++  if (!uiContent.includes('notify({')) {
+
++    console.error('Failed: No notify() usage found in model-exchange-tab.js');
+
++    passed = false;
+
++  }
+
++  if (!uiContent.includes('ModelexhPreviewRenderer')) {
+
++    console.error('Failed: ModelexhPreviewRenderer is not wired in model-exchange-tab.js');
+
++    passed = false;
+
++  }
+
++  if (!uiContent.includes('data-role="modelexh-preview"')) {
+
++    console.error('Failed: Modelexh preview canvas host missing in model-exchange-tab.js');
+
++    passed = false;
+
++  }
+
++  if (!uiContent.includes('open-support-config')) {
+
++    console.error('Failed: Support settings entry point missing in model-exchange-tab.js');
+
++    passed = false;
+
++  }
+
++
+
++  const outDir = path.join(__dirname, '../../../artifacts/A6/pass');
+
++  if (!fs.existsSync(outDir)) {
+
++    fs.mkdirSync(outDir, { recursive: true });
+
++  }
+
++
+
++  if (passed) {
+
++    console.log('\u2705 A6 UI Surface integration tests passed.');
+
++    fs.writeFileSync(path.join(outDir, 'e2e.txt'), '\u2705 A6 UI Surface integration tests passed.');
+
++  } else {
+
++    process.exit(1);
+
++  }
+
++}
+
++
+
++runTests();
+
+
+diff --git a/viewer/tests/run-interface-tests.mjs b/viewer/tests/run-interface-tests.mjs
+new file mode 100644
+index 0000000..1111111 100644
+--- a/viewer/tests/run-interface-tests.mjs
++++ b/viewer/tests/run-interface-tests.mjs
+@@ -0,0 +1,51 @@
++﻿import { spawnSync } from 'child_process';
+
++import path from 'path';
+
++import { fileURLToPath, pathToFileURL } from 'url';
+
++
+
++const __filename = fileURLToPath(import.meta.url);
+
++const __dirname = path.dirname(__filename);
+
++
+
++const tests = [
+
++  './unit/interchange/conversion-config.test.js',
+
++  './unit/interchange/stp-support-parser.test.js',
+
++  './unit/interchange/converter-worker-contract.test.js',
+
++  './unit/interchange/adapter-registry.test.js',
+
++  './unit/interchange/support-mapping-config.test.js',
+
++  './integration/interchange-config-ui.test.js',
+
++  './integration/interchange-export-smoke.test.js',
+
++  './integration/model-exchange-ui.test.js',
+
++  './integration/export-roundtrip.test.js',
+
++  './integration/rvm-viewer-commands.test.js',
+
++  './unit/rvm/rvm-search.test.js',
+
++  './unit/rvm/rvm-bundle-manifest.test.js',
+
++  './unit/rvm/rvm-identity-map.test.js',
+
++  './unit/rvm/rvm-capabilities.test.js',
+
++  './integration/rvm-tab-shell.test.js',
+
++  './integration/rvm-load-pipeline.test.js',
+
++  './unit/rvm/rvm-tag-xml.test.js',
+
++  './unit/rvm/rvm-saved-views.test.js',
+
++  './unit/rvm/rvm-assisted.test.js',
+
++];
+
++
+
++for (const rel of tests) {
+
++  const abs = path.join(__dirname, rel);
+
++  const importUrl = pathToFileURL(abs).href;
+
++  const runnerScript = `
+
++    global.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {}, length: 0, key: () => null };
+
++    global.sessionStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {}, length: 0, key: () => null };
+
++    global.window = { localStorage: global.localStorage, sessionStorage: global.sessionStorage };
+
++    if (!global.crypto) global.crypto = { randomUUID: () => Math.random().toString() };
+
++    import(${JSON.stringify(importUrl)});
+
++  `;
+
++  const result = spawnSync(
+
++    process.execPath,
+
++    ['--input-type=module', '--eval', runnerScript],
+
++    { stdio: 'inherit' },
+
++  );
+
++  if (result.status !== 0) {
+
++    process.exit(result.status || 1);
+
++  }
+
++}
+
++
+
++console.log('âœ… interface test suite passed.');
+
++
+

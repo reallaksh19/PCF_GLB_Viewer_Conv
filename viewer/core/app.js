@@ -2,11 +2,13 @@ import { loadStickyState, state, setActiveTab } from './state.js';
 import { RuntimeEvents } from '../contracts/runtime-events.js';
 import { renderViewer3D } from '../tabs/viewer3d-tab.js';
 import { renderViewer3DRvm } from '../tabs/viewer3d-rvm-tab.js';
-import { renderAdvancedGlbViewerPanel } from '../js/pcf2glb/ui/AdvancedGlbViewerPanel.js';
+import { renderBasicGlbPcfPanel } from '../js/pcf2glb/ui/BasicGlbPcfPanel.js';
 import { renderPcfxConverterTab } from '../tabs/pcfx-converter-tab.js';
 import { renderModelExchangeTab } from '../tabs/model-exchange-tab.js';
 import { renderInterchangeConfigTab } from '../tabs/interchange-config-tab.js';
+import { renderSupportMappingConfigTab } from '../tabs/support-mapping-config-tab.js';
 import { renderModelConvertersTab } from '../tabs/model-converters-tab.js';
+import { renderAdapterMappingTab } from '../tabs/adapter-mapping-tab.js';
 import { emit, on } from './event-bus.js';
 import { initDevDebugWindow, destroyDevDebugWindow } from '../debug/dev-debug-window.js';
 import { loadRvmSource } from '../rvm/RvmLoadPipeline.js';
@@ -21,11 +23,17 @@ const IS_DEV = window.location.hostname === 'localhost' || window.location.hostn
 const TABS = [
   { id: 'viewer3d', label: '3D Viewer', render: renderViewer3D },
   { id: 'viewer3d-rvm', label: '3D RVM Viewer', render: renderViewer3DRvm },
-  ...(IS_DEV ? [{ id: 'adv-glb', label: 'Advanced GLB Viewer', render: renderAdvancedGlbViewerPanel }] : []),
-  { id: 'pcfx-converter', label: 'PCF<->PCFX<->GLB', render: renderPcfxConverterTab },
-  { id: 'model-exchange', label: 'Model Exchange', render: renderModelExchangeTab },
-  { id: 'interchange-config', label: 'Interchange Config', render: renderInterchangeConfigTab },
+  ...(IS_DEV ? [
+    { id: 'adv-glb', label: 'Basic GLB/PCF Viewer', render: renderBasicGlbPcfPanel }
+  ] : []),
   { id: 'model-converters', label: '3D Model Converters', render: renderModelConvertersTab },
+  { id: 'model-exchange', label: 'PCF/PCFX/XML/GLB Converter', render: renderModelExchangeTab },
+  { id: 'interchange-config', label: 'PCF/PCFX/XML/GLB Config', render: renderInterchangeConfigTab },
+  { id: 'support-mapping-config', label: 'PCF/PCFX/XML/GLB Support Config', render: renderSupportMappingConfigTab },
+  ...(IS_DEV ? [
+    { id: 'pcfx-converter', label: 'PCF<->PCFX<->GLB', render: renderPcfxConverterTab }
+  ] : []),
+  { id: 'adapter-mapping', label: '⚙ 3D RVM Adapter Mapping', render: renderAdapterMappingTab },
 ];
 
 let _activeDestroyFn = null;
@@ -51,39 +59,53 @@ function _bindGlobalEvents() {
   on(RuntimeEvents.FILE_LOADED, async (payload) => {
     if (payload.source === 'rvm-tab') {
       try {
-        let activeBridge = null;
+        const kind = String(payload.kind || 'raw-rvm');
+        const staticCtx = {
+          capabilities: state.rvm?.capabilities || {},
+          staticBundleLoader: new RvmStaticBundleLoader(),
+          assistedBridge: null
+        };
+
+        if (kind === 'bundle') {
+          await loadRvmSource({ kind: 'bundle', bundle: payload.payload }, staticCtx);
+          return;
+        }
+        if (kind === 'aveva-json') {
+          await loadRvmSource({ kind: 'aveva-json', data: payload.payload }, staticCtx);
+          return;
+        }
+
+        // Fallback to local assisted mode configuration if capabilities are unpopulated or static
         let caps = state.rvm?.capabilities;
+        if (!caps || !caps.rawRvmImport) {
+             caps = { rawRvmImport: true, deploymentMode: 'assisted' };
+        }
 
-        // Only require a backend bridge if we are actually loading a raw RVM file
-        if (payload.kind === 'raw-rvm') {
-            if (!caps || !caps.rawRvmImport) {
-                 caps = { rawRvmImport: true, deploymentMode: 'assisted' };
-            }
+        // 1. Check if the local Node.js test server bridge is alive
+        const localBridge = new RvmHelperBridge();
+        const localProbe = await localBridge.probe();
 
-            // 1. Check if the local Node.js test server bridge is alive
-            const localBridge = new RvmHelperBridge();
-            const localProbe = await localBridge.probe();
+        // 2. Instantiate the GitHub Actions serverless fallback
+        const ghBridge = new RvmGitHubActionsBridge();
+        const ghProbe = await ghBridge.probe();
 
-            // 2. Instantiate the GitHub Actions serverless fallback
-            const ghBridge = new RvmGitHubActionsBridge();
-            const ghProbe = await ghBridge.probe();
+        let activeBridge = null;
 
-            if (localProbe.reachable) {
-                activeBridge = localBridge;
-                console.log("Using Local test_server RvmHelperBridge");
-            } else if (ghProbe.reachable) {
+        if (localProbe.reachable) {
+            activeBridge = localBridge;
+            console.log("Using Local test_server RvmHelperBridge");
+        } else if (ghProbe.reachable) {
+            activeBridge = ghBridge;
+            console.log("Using serverless RvmGitHubActionsBridge");
+        } else {
+            // Prompt the user for a PAT to enable serverless mode if everything is dead
+            const pat = prompt("No local conversion server found. Enter a GitHub Personal Access Token (PAT) to enable remote serverless conversion via GitHub Actions:");
+            if (pat) {
+                ghBridge.setPat(pat);
                 activeBridge = ghBridge;
-                console.log("Using serverless RvmGitHubActionsBridge");
+                console.log("Configured serverless RvmGitHubActionsBridge with new PAT");
             } else {
-                // Prompt the user for a PAT to enable serverless mode if everything is dead
-                const pat = prompt("No local conversion server found. Enter a GitHub Personal Access Token (PAT) to enable remote serverless conversion via GitHub Actions:");
-                if (pat) {
-                    ghBridge.setPat(pat);
-                    activeBridge = ghBridge;
-                    console.log("Configured serverless RvmGitHubActionsBridge with new PAT");
-                } else {
-                    throw new Error("No available RVM conversion backends. Start the local server or provide a GitHub PAT.");
-                }
+                throw new Error("No available RVM conversion backends. Start the local server or provide a GitHub PAT.");
             }
         }
 
@@ -93,16 +115,7 @@ function _bindGlobalEvents() {
           assistedBridge: activeBridge
         };
 
-        let loadPayload;
-        if (payload.kind === 'bundle') {
-            loadPayload = { kind: 'bundle', bundle: payload.payload };
-        } else if (payload.kind === 'aveva-json') {
-            loadPayload = { kind: 'aveva-json', data: payload.payload };
-        } else {
-            loadPayload = { kind: 'raw-rvm', file: payload.payload };
-        }
-
-        await loadRvmSource(loadPayload, ctx);
+        await loadRvmSource({ kind: 'raw-rvm', file: payload.payload, sidecars: payload.sidecars }, ctx);
       } catch (err) {
         console.error('RVM Load Pipeline failed:', err);
         alert(err.message);
@@ -176,3 +189,4 @@ function _resolveInitialTabId() {
   const match = _visibleTabs.find((tab) => tab.id === requested);
   return match?.id || _visibleTabs[0]?.id || 'viewer3d';
 }
+

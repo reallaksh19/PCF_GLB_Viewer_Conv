@@ -62,6 +62,16 @@ export class RvmSectioning {
         this._renderSectionBoxVisual(box);
     }
 
+    setClipBounds({ minX, maxX, minY, maxY, minZ, maxZ }) {
+        if (this._sectionMode !== 'BOX') return;
+        const box = new THREE.Box3(
+            new THREE.Vector3(minX, minY, minZ),
+            new THREE.Vector3(maxX, maxY, maxZ)
+        );
+        this._applyBoxPlanes(box);
+        this._renderSectionBoxVisual(box);
+    }
+
 
     buildPlaneUpSection(modelGroup) {
         if (!modelGroup) return;

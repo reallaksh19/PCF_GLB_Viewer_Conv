@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 
+import { emit } from '../core/event-bus.js';
+import { RuntimeEvents } from '../contracts/runtime-events.js';
+
 const COLORS = {
     SELECTED: 0x2244cc,
     SEARCH_RESULT: 0x884400,
@@ -56,6 +59,7 @@ export class RvmSelectionAdapter {
 
         // If clicked on nothing, clear selection
         this.clearSelection();
+        emit(RuntimeEvents.RVM_NODE_SELECTED, { canonicalId: null });
     }
 
     _handlePick(renderId) {
@@ -69,9 +73,7 @@ export class RvmSelectionAdapter {
 
 
         this.selectByCanonicalId(canonicalId);
-
-        // Optional: emit event for RVM_NODE_SELECTED
-        // if window.eventBus exists, etc.
+        emit(RuntimeEvents.RVM_NODE_SELECTED, { canonicalId });
     }
 
     selectByCanonicalId(canonicalId) {

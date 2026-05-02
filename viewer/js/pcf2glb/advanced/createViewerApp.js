@@ -18,7 +18,7 @@ import { computeBoundingMeasurement } from '../pro-editor/core/measureUtils.js';
 export function createViewerApp(previewContainer, toolbarContainer, propPanel, propContent, debugLogsContainer) {
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x222222);
+  scene.background = new THREE.Color(0x3a3a45); // Brighter mid-grey — geometry visible
 
   // Defer initialization to first frame to ensure container has size
   let initialized = false;
@@ -31,6 +31,7 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
   let sectionBox = null;
   let debugPanel = null;
   let selection = null;
+  let marqueeZoom = null;
   let css2dRenderer = null;
   let msgCircleGroup = new THREE.Group();
   let msgSquareGroup = new THREE.Group();
@@ -68,12 +69,17 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
     axesHelper = createAxisHelper(camera, domElement);
     // ViewHelper automatically attaches to camera, no need to add to scene
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-    dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.2));  // Strong ambient so geometry is always visible
+    dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
     dirLight.position.set(100, 200, 50);
     scene.add(dirLight);
 
-    pointLight = new THREE.PointLight(0xffffff, 0.5);
+    // Fill light from opposite side for better contrast on dark materials
+    const fillLight = new THREE.DirectionalLight(0xc8d8ff, 0.6);
+    fillLight.position.set(-80, -100, -60);
+    scene.add(fillLight);
+
+    pointLight = new THREE.PointLight(0xffffff, 0.4);
     camera.add(pointLight);
     scene.add(camera);
 
@@ -93,9 +99,9 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
 
     debugPanel = createDebugPanel(debugLogsContainer);
 
-    // Wire up marquee zoom (Shift + Drag)
+    // Wire up marquee zoom (button-toggled)
     const getActiveCamera = () => controller.getActiveCamera();
-    const marqueeZoom = createMarqueeZoom(getActiveCamera, scene, domElement, controller);
+    marqueeZoom = createMarqueeZoom(getActiveCamera, scene, domElement, controller);
 
     toolbar.setSectionHandler((enabled) => {
         sectionEnabled = !!enabled;
@@ -110,7 +116,6 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
     selection = createSelection(getActiveCamera, scene, domElement);
     selection.onSelect((clickedObj) => {
         if (!clickedObj || !sceneIndex) {
-            controller.resetTarget();
             propertyPanel.hide();
             if (measurementListener) measurementListener(null);
             return;
@@ -120,7 +125,14 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
         const item = sceneIndex.byId.get(id);
 
         if (item) {
-            controller.fitObject(item.object3D);
+            // Re-center orbit target on the clicked object to make rotation natural
+            const box = new THREE.Box3().setFromObject(item.object3D);
+            if (!box.isEmpty()) {
+              const center = box.getCenter(new THREE.Vector3());
+              controller.setTarget(center);
+            }
+
+            // No auto-fit on selection — user must click FIT manually
             propertyPanel.show(item);
             if (measureEnabled && measurementListener) {
               const measurement = computeBoundingMeasurement(item.object3D);
@@ -185,8 +197,14 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
     fitAll: () => {
       if (currentRoot && controller) controller.fitScene(currentRoot);
     },
+    setTarget: (targetVec) => {
+      controller?.setTarget?.(targetVec);
+    },
     setPresetView: (name) => {
       controller?.setPresetView?.(name);
+    },
+    setMarqueeZoom: (enabled) => {
+      marqueeZoom?.setEnabled?.(enabled);
     },
     toggleSection: () => {
       sectionEnabled = !sectionEnabled;
@@ -196,6 +214,18 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
       } else {
         sectionBox?.disable?.(currentRoot);
       }
+    },
+    getModelBounds: () => {
+      if (!currentRoot) return null;
+      const box = new THREE.Box3().setFromObject(currentRoot);
+      if (box.isEmpty()) return null;
+      return { min: box.min.clone(), max: box.max.clone() };
+    },
+    setSectionClipBounds: (bounds) => {
+      sectionBox?.setClipBounds?.(bounds);
+    },
+    resetSectionToModel: () => {
+      if (currentRoot) sectionBox?.fitToScene?.(currentRoot);
     },
     loadGLB: async (url) => {
       init();
@@ -220,6 +250,27 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
 
               controller.fitScene(currentRoot);
               dirLight.position.copy(controller.getActiveCamera().position);
+
+              // Force visible materials — brighten any mesh that is near-black
+              currentRoot.traverse(child => {
+                if (!child.isMesh) return;
+                const mats = Array.isArray(child.material) ? child.material : [child.material];
+                mats.forEach(mat => {
+                  if (!mat) return;
+                  // Store original for heatmap reset
+                  if (!mat.userData.__baseColor) mat.userData.__baseColor = mat.color?.clone?.();
+                  // If the mesh is very dark (luminance < 0.15), force a light steel-blue
+                  const c = mat.color;
+                  if (c) {
+                    const lum = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+                    if (lum < 0.15) { c.setHex(0x6eb5e0); mat.userData.__baseColor = c.clone(); }
+                  }
+                  // Ensure metalness doesn’t kill visibility
+                  if (mat.metalness !== undefined) mat.metalness = Math.min(mat.metalness, 0.3);
+                  if (mat.roughness !== undefined) mat.roughness = Math.max(mat.roughness, 0.45);
+                  mat.needsUpdate = true;
+                });
+              });
 
               debugPanel.log('system', 'info', `Loaded scene with ${sceneIndex.items.length} indexed objects`);
 

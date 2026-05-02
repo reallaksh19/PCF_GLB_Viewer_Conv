@@ -1,4 +1,5 @@
 export function createToolbar(container, cameraController) {
+  const CLIP_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16"/><path d="M10 4v16"/></svg>';
   container.innerHTML = `
     <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:flex-end;">
       <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:12px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.08); color:#d8e6f7; font-size:12px; font-weight:600;">
@@ -15,7 +16,7 @@ export function createToolbar(container, cameraController) {
         <button class="btn-icon" id="adv-view-side" title="Side View" style="padding:7px 12px; border-radius:10px; border:1px solid rgba(133,188,255,0.2); background:rgba(255,255,255,0.06); color:#d2e3f6; font-size:11px; font-weight:700; letter-spacing:0.08em;">SIDE</button>
         <button class="btn-icon" id="adv-view-fit" title="Fit Scene" style="padding:7px 12px; border-radius:10px; border:1px solid rgba(255,191,120,0.35); background:rgba(224,112,32,0.18); color:#ffe2c2; font-size:11px; font-weight:700; letter-spacing:0.08em;">FIT ALL</button>
         <button class="btn-icon" id="adv-measure-btn" title="Measure Selection" style="padding:7px 12px; border-radius:10px; border:1px solid rgba(111,206,168,0.24); background:rgba(255,255,255,0.06); color:#d2e3f6; font-size:11px; font-weight:700; letter-spacing:0.08em;">MEASURE</button>
-        <button class="btn-icon" id="adv-section-btn" title="Toggle Section Box" style="padding:7px 12px; border-radius:10px; border:1px solid rgba(140,226,176,0.24); background:rgba(255,255,255,0.06); color:#d2e3f6; font-size:11px; font-weight:700; letter-spacing:0.08em;">CLIP OFF</button>
+        <button class="btn-icon" id="adv-section-btn" title="Toggle Section Box" style="display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border-radius:10px; border:1px solid rgba(140,226,176,0.24); background:rgba(255,255,255,0.06); color:#d2e3f6; font-size:11px; font-weight:700; letter-spacing:0.08em;">${CLIP_ICON}<span id="adv-section-btn-label">CLIP OFF</span></button>
       </div>
     </div>
 
@@ -27,6 +28,7 @@ export function createToolbar(container, cameraController) {
 
   const colorSelect = container.querySelector('#adv-color-prop');
   const sectionBtn = container.querySelector('#adv-section-btn');
+  const sectionBtnLabel = container.querySelector('#adv-section-btn-label');
   const measureBtn = container.querySelector('#adv-measure-btn');
   const legendPanel = container.querySelector('#adv-legend-panel');
   const legendContent = container.querySelector('#adv-legend-content');
@@ -44,12 +46,12 @@ export function createToolbar(container, cameraController) {
       sectionBtn.style.border = '1px solid rgba(111, 238, 167, 0.42)';
       sectionBtn.style.background = 'rgba(49, 150, 87, 0.24)';
       sectionBtn.style.color = '#d7ffe5';
-      sectionBtn.textContent = 'CLIP ON';
+      if (sectionBtnLabel) sectionBtnLabel.textContent = 'CLIP ON';
     } else {
       sectionBtn.style.border = '1px solid rgba(140,226,176,0.24)';
       sectionBtn.style.background = 'rgba(255,255,255,0.06)';
       sectionBtn.style.color = '#d2e3f6';
-      sectionBtn.textContent = 'CLIP OFF';
+      if (sectionBtnLabel) sectionBtnLabel.textContent = 'CLIP OFF';
     }
     if (sectionHandler) sectionHandler(sectionOn);
   });
