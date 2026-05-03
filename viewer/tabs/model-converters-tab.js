@@ -3,7 +3,7 @@ import { state } from '../core/state.js';
 import { RuntimeEvents } from '../contracts/runtime-events.js';
 import { notify } from '../diagnostics/notification-center.js';
 import { pickImportAdapter } from '../interchange/source/adapter-registry.js';
-import { ModelConverters_3DModelConv_PreviewRenderer } from '../converters/view/3DModelConv_PreviewRenderer.js';
+import { ModelConverters_3DModelConv_PreviewRenderer } from '../converters/view/model-conv-preview-renderer.js';
 import {
   buildConverterWorkerRequest,
   validateConverterWorkerResponse,
