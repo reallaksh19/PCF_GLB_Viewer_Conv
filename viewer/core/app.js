@@ -15,6 +15,7 @@ import { loadRvmSource } from '../rvm/RvmLoadPipeline.js';
 import { RvmStaticBundleLoader } from '../rvm/RvmStaticBundleLoader.js';
 import { RvmHelperBridge } from '../converters/rvm-helper-bridge.js';
 import { RvmGitHubActionsBridge } from '../converters/rvm-github-bridge.js';
+import { convertRevFileToAvevaHierarchy } from '../rvm/RevLocalLoader.js';
 
 const TAB_CONFIG_URL = './opt/tab-visibility.json';
 
@@ -72,6 +73,12 @@ function _bindGlobalEvents() {
         }
         if (kind === 'aveva-json') {
           await loadRvmSource({ kind: 'aveva-json', data: payload.payload }, staticCtx);
+          return;
+        }
+
+        if (kind === 'raw-rev') {
+          const hierarchy = await convertRevFileToAvevaHierarchy(payload.payload);
+          await loadRvmSource({ kind: 'aveva-json', data: hierarchy }, staticCtx);
           return;
         }
 

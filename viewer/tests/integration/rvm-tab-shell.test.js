@@ -37,7 +37,7 @@ assert.ok(
 );
 
 // ✅ tab-visibility.json enables viewer3d-rvm
-const tabVisJson = JSON.parse(tabVis);
+const tabVisJson = JSON.parse(tabVis.replace(/^\uFEFF/, ""));
 assert.equal(tabVisJson['viewer3d-rvm'], 1, 'tab-visibility.json must have "viewer3d-rvm": 1');
 
 // ✅ index.html links viewer3d-rvm-tab.css

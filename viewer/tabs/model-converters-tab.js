@@ -3,7 +3,7 @@ import { state } from '../core/state.js';
 import { RuntimeEvents } from '../contracts/runtime-events.js';
 import { notify } from '../diagnostics/notification-center.js';
 import { pickImportAdapter } from '../interchange/source/adapter-registry.js';
-import { ModelConverters_3DModelConv_PreviewRenderer } from '../converters/view/3DModelConv_PreviewRenderer.js';
+import { ModelConverters_3DModelConv_PreviewRenderer } from '../converters/view/model-conv-preview-renderer.js';
 import {
   buildConverterWorkerRequest,
   validateConverterWorkerResponse,
@@ -168,6 +168,37 @@ const CONVERTER_DEFS = Object.freeze({
       { key: 'mockFluidDensity', label: 'Mock Fluid Density', type: 'number', step: '0.1' },
     ],
   },
+  stagedjson_to_xml: {
+    id: 'stagedjson_to_xml',
+    label: 'StagedJSON -> XML',
+    primaryAccept: '.json,.JSON',
+    primaryLabel: 'Staged JSON Input',
+    secondaryLabel: '',
+    secondaryAccept: '',
+    description: 'Convert staged hierarchy JSON (branch -> children -> attributes) to PSI116-style XML.',
+    defaults: {
+      nodeStart: 10,
+      nodeStep: 10,
+      source: 'AVEVA PSI',
+      purpose: 'RMSS staged JSON conversion',
+      titleLine: 'RMSS StagedJSON Output',
+      defaultDiameter: 100,
+      defaultWallThickness: 0.01,
+      defaultInsulationThickness: 0,
+      defaultCorrosionAllowance: 0,
+    },
+    fields: [
+      { key: 'nodeStart', label: 'Node Start', type: 'number', step: '1' },
+      { key: 'nodeStep', label: 'Node Step', type: 'number', step: '1' },
+      { key: 'source', label: 'Source', type: 'text' },
+      { key: 'purpose', label: 'Purpose', type: 'text' },
+      { key: 'titleLine', label: 'Title Line', type: 'text' },
+      { key: 'defaultDiameter', label: 'Default Diameter', type: 'number', step: '0.001' },
+      { key: 'defaultWallThickness', label: 'Default Wall Thickness', type: 'number', step: '0.001' },
+      { key: 'defaultInsulationThickness', label: 'Default Insulation', type: 'number', step: '0.001' },
+      { key: 'defaultCorrosionAllowance', label: 'Default Corrosion', type: 'number', step: '0.001' },
+    ],
+  },
   rev_to_stp: {
     id: 'rev_to_stp',
     label: 'REV -> STP',
@@ -235,7 +266,85 @@ const CONVERTER_DEFS = Object.freeze({
       { key: 'defaultReducerAngle', label: 'Default Reducer Angle', type: 'number', step: '0.01' },
     ],
   },
+  inputxml14_to_cii: {
+    id: 'inputxml14_to_cii',
+    label: 'InputXML(Ver14) -> CII',
+    primaryAccept: '.xml,.XML',
+    primaryLabel: 'Input XML (Ver14)',
+    secondaryLabel: 'Reference CII (optional)',
+    secondaryAccept: '.cii,.CII',
+    description: 'Convert CAESARII Input XML Ver14 to CII.',
+    defaults: {
+      inferReducerAngleFromGeometry: false,
+      defaultDiameter: 0,
+      defaultWallThickness: 0.01,
+      defaultInsulationThickness: 0,
+      defaultCorrosionAllowance: 0,
+      defaultTemperature1: 0,
+      defaultTemperature2: 0,
+      defaultTemperature3: 0,
+      defaultReducerAngle: 0,
+    },
+    fields: [
+      { key: 'inferReducerAngleFromGeometry', label: 'Infer Reducer Angle From Geometry', type: 'checkbox' },
+      { key: 'defaultDiameter', label: 'Default Diameter', type: 'number', step: '0.001' },
+      { key: 'defaultWallThickness', label: 'Default Wall Thickness', type: 'number', step: '0.001' },
+      { key: 'defaultInsulationThickness', label: 'Default Insulation Thickness', type: 'number', step: '0.001' },
+      { key: 'defaultCorrosionAllowance', label: 'Default Corrosion Allowance', type: 'number', step: '0.001' },
+      { key: 'defaultTemperature1', label: 'Default Temperature1', type: 'number', step: '0.01' },
+      { key: 'defaultTemperature2', label: 'Default Temperature2', type: 'number', step: '0.01' },
+      { key: 'defaultTemperature3', label: 'Default Temperature3', type: 'number', step: '0.01' },
+      { key: 'defaultReducerAngle', label: 'Default Reducer Angle', type: 'number', step: '0.01' },
+    ],
+  },
+  pdf_to_inputxml: {
+    id: 'pdf_to_inputxml',
+    label: 'PDF -> InputXML',
+    primaryAccept: '.pdf,.PDF',
+    primaryLabel: 'Input Echo PDF',
+    secondaryLabel: 'Misc PDF (optional)',
+    secondaryAccept: '.pdf,.PDF',
+    description: 'Convert CAESAR Input Echo PDF to Input XML.',
+    defaults: {},
+    fields: [],
+  },
+  pdf_to_inputxml_cii14: {
+    id: 'pdf_to_inputxml_cii14',
+    label: 'PDF -> InputXML (CII14)',
+    primaryAccept: '.pdf,.PDF',
+    primaryLabel: 'Input Echo PDF',
+    secondaryLabel: 'Benchmark Input XML (required)',
+    secondaryAccept: '.xml,.XML',
+    description: 'Convert PDF to CII14 InputXML using benchmark structure.',
+    defaults: {
+      outputMode: 'preserve',
+    },
+    fields: [
+      { key: 'outputMode', label: 'Output Mode', type: 'select', options: ['preserve', 'overlay'] },
+    ],
+  },
 });
+
+const CONVERTER_ORDER = Object.freeze([
+  'rvm_to_rev',
+  'rvmattr_to_xml',
+  'rev_to_pcf',
+  'rev_to_xml',
+  'rev_to_stp',
+  'json_to_xml',
+  'stagedjson_to_xml',
+  'pdf_to_inputxml',
+  'pdf_to_inputxml_cii14',
+  'xml_to_cii',
+  'inputxml_to_cii',
+  'inputxml14_to_cii',
+]);
+
+const ORDERED_CONVERTER_DEFS = Object.freeze(
+  CONVERTER_ORDER
+    .map((converterId) => CONVERTER_DEFS[converterId])
+    .filter(Boolean),
+);
 
 const RMSS_BORE_FIELDS = Object.freeze(['HBOR', 'TBOR', 'ABORE', 'LBORE', 'DTXR']);
 
@@ -314,11 +423,11 @@ function _createWorkerRuntime() {
 
 function _loadStoredState() {
   const defaultsByConverter = {};
-  for (const def of Object.values(CONVERTER_DEFS)) {
+  for (const def of ORDERED_CONVERTER_DEFS) {
     defaultsByConverter[def.id] = _clone(def.defaults);
   }
 
-  let selectedConverter = 'rev_to_pcf';
+  let selectedConverter = 'rvm_to_rev';
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
@@ -683,6 +792,164 @@ function _buildPsiXmlFromRmssHierarchy(hierarchy, inputName, options) {
   };
 }
 
+function _isObjectRecord(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function _looksLikeBranchNode(entry) {
+  if (!_isObjectRecord(entry)) return false;
+  const typeToken = _toText(entry?.type || entry?.attributes?.TYPE || '').toUpperCase();
+  const hasBranchType = typeToken === 'BRANCH' || typeToken === 'BRAN';
+  const hasChildren = Array.isArray(entry.children);
+  return hasBranchType && hasChildren;
+}
+
+function _looksLikeStagedHierarchy(payload) {
+  if (!Array.isArray(payload) || payload.length === 0) return false;
+  let branchCount = 0;
+  for (const entry of payload) {
+    if (_looksLikeBranchNode(entry)) branchCount += 1;
+  }
+  return branchCount > 0;
+}
+
+function _collectBboxLeafCount(payload) {
+  let count = 0;
+  const stack = [payload];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (Array.isArray(current)) {
+      for (const child of current) stack.push(child);
+      continue;
+    }
+    if (!_isObjectRecord(current)) continue;
+    const children = Array.isArray(current.children) ? current.children : null;
+    const bbox = Array.isArray(current.bbox) ? current.bbox : null;
+    const isLeaf = !children || children.length === 0;
+    if (isLeaf && bbox && bbox.length === 6) count += 1;
+    if (children) {
+      for (const child of children) stack.push(child);
+    }
+  }
+  return count;
+}
+
+function _buildXmlFromStagedJsonText(stagedJsonText, inputName, options) {
+  let parsed;
+  try {
+    parsed = JSON.parse(_toText(stagedJsonText));
+  } catch (error) {
+    throw new Error(`Staged JSON parse failed: ${_toText(error?.message || error)}`);
+  }
+  if (!_looksLikeStagedHierarchy(parsed)) {
+    throw new Error('JSON payload is not staged hierarchy format (branch -> children -> attributes).');
+  }
+  const xmlBuild = _buildPsiXmlFromRmssHierarchy(parsed, inputName, options);
+  return {
+    xmlText: xmlBuild.xmlText,
+    stageJsonText: JSON.stringify(parsed, null, 2),
+    branchCount: xmlBuild.branchCount,
+    nodeCount: xmlBuild.nodeCount,
+    skippedComponents: xmlBuild.skippedComponents,
+  };
+}
+
+function _normalizePreviewPoint(value) {
+  if (!value && value !== 0) return null;
+  if (typeof value === 'object' && !Array.isArray(value)) return _normalizePoint(value);
+  if (typeof value !== 'string') return null;
+  const src = value.trim();
+  if (!src) return null;
+  const tokens = src.split(/\s+/g);
+  if (tokens.length < 2) return null;
+  const point = { x: 0, y: 0, z: 0 };
+  let parsedAny = false;
+  for (let i = 0; i < tokens.length - 1; i += 2) {
+    const axis = tokens[i].toUpperCase();
+    const num = Number.parseFloat(tokens[i + 1].replace(/mm/gi, ''));
+    if (!Number.isFinite(num)) continue;
+    if (axis === 'E') { point.x = num; parsedAny = true; }
+    else if (axis === 'W') { point.x = -num; parsedAny = true; }
+    else if (axis === 'N') { point.y = num; parsedAny = true; }
+    else if (axis === 'S') { point.y = -num; parsedAny = true; }
+    else if (axis === 'U') { point.z = num; parsedAny = true; }
+    else if (axis === 'D') { point.z = -num; parsedAny = true; }
+  }
+  return parsedAny ? point : null;
+}
+
+function _buildPreviewProjectFromStagedHierarchy(payload) {
+  if (!_looksLikeStagedHierarchy(payload)) return null;
+  const segments = [];
+  const nodes = [];
+  const supports = [];
+  const annotations = [];
+  const nodeByKey = new Map();
+  let segmentId = 1;
+  let nodeId = 1;
+  let supportId = 1;
+
+  const asNode = (coord) => {
+    const key = `${_formatDecimal(coord.x, 4)}|${_formatDecimal(coord.y, 4)}|${_formatDecimal(coord.z, 4)}`;
+    if (nodeByKey.has(key)) return nodeByKey.get(key);
+    const created = {
+      id: `SJ-N${nodeId}`,
+      position: { x: coord.x, y: coord.y, z: coord.z },
+      normalized: { position: { x: coord.x, y: coord.y, z: coord.z } },
+    };
+    nodeId += 1;
+    nodes.push(created);
+    nodeByKey.set(key, created);
+    return created;
+  };
+
+  for (const branch of payload) {
+    if (!_looksLikeBranchNode(branch)) continue;
+    const children = Array.isArray(branch.children) ? branch.children : [];
+    for (const child of children) {
+      const attrs = child?.attributes || {};
+      const type = _toText(child?.type || attrs.TYPE).toUpperCase();
+      const apos = _normalizePreviewPoint(attrs.APOS);
+      const lpos = _normalizePreviewPoint(attrs.LPOS);
+      const pos = _normalizePreviewPoint(attrs.POS);
+      if (type === 'SUPPORT' || type === 'ATTA' || type === 'ANCI') {
+        const anchor = pos || apos || lpos;
+        if (!anchor) continue;
+        supports.push({
+          id: `SJ-S${supportId}`,
+          normalized: { supportCoord: { x: anchor.x, y: anchor.y, z: anchor.z } },
+        });
+        supportId += 1;
+        continue;
+      }
+      if (!apos || !lpos) continue;
+      const fromNode = asNode(apos);
+      const toNode = asNode(lpos);
+      segments.push({
+        id: `SJ-E${segmentId}`,
+        fromNodeId: fromNode.id,
+        toNodeId: toNode.id,
+        normalized: {
+          ep1: { x: apos.x, y: apos.y, z: apos.z },
+          ep2: { x: lpos.x, y: lpos.y, z: lpos.z },
+        },
+        attributes: { TYPE: type },
+      });
+      segmentId += 1;
+    }
+  }
+
+  if (!segments.length && !supports.length) return null;
+  return {
+    id: 'stagedjson-preview',
+    name: 'Staged JSON Preview',
+    segments,
+    nodes,
+    supports,
+    annotations,
+  };
+}
+
 function _normalizeCoordsMode(value) {
   const mode = _toText(value).trim().toLowerCase();
   if (mode === 'all' || mode === 'none') return mode;
@@ -702,6 +969,23 @@ async function _3DModelConv_tryBuildProjectFromOutput(output) {
   const text = _toText(output?.text);
   if (!name || !text) {
     return { ok: false, reason: 'Output has no text payload for preview.' };
+  }
+
+  if (name.toLowerCase().endsWith('.json')) {
+    try {
+      const parsed = JSON.parse(text);
+      const stagedProject = _buildPreviewProjectFromStagedHierarchy(parsed);
+      if (stagedProject) {
+        return {
+          ok: true,
+          project: stagedProject,
+          adapterName: 'StagedHierarchyPreview',
+          outputName: name,
+        };
+      }
+    } catch {
+      // Continue to adapter-based fallback.
+    }
   }
 
   try {
@@ -738,8 +1022,21 @@ async function _3DModelConv_buildPreviewFromOutputs(outputs) {
     return { ok: false, reason: 'No outputs available to preview.' };
   }
 
+  const prioritized = [...normalized].sort((a, b) => {
+    const nameA = _toText(a?.name).toLowerCase();
+    const nameB = _toText(b?.name).toLowerCase();
+    const score = (name) => {
+      if (name.endsWith('.json') && name.includes('managed_stage')) return 0;
+      if (name.endsWith('.json')) return 1;
+      if (name.endsWith('.rev')) return 2;
+      if (name.endsWith('.xml')) return 3;
+      return 4;
+    };
+    return score(nameA) - score(nameB);
+  });
+
   let lastReason = 'No previewable output found.';
-  for (const output of normalized) {
+  for (const output of prioritized) {
     const result = await _3DModelConv_tryBuildProjectFromOutput(output);
     if (result.ok) return result;
     lastReason = result.reason || lastReason;
@@ -933,39 +1230,89 @@ async function _runManagedRvmAttributeToXml(
       if (nativeJson) {
         const jsonOutput = nativeJson.outputs?.[0];
         if (jsonOutput && typeof jsonOutput.text === 'string') {
-          const jsonToXmlResponse = await runtime.runJob({
-            converterId: 'json_to_xml',
-            inputFiles: [{ role: 'primary', name: jsonOutput.name, bytes: _encodeTextUtf8(jsonOutput.text) }],
-            options: {
-              coordFactor: options?.coordFactor,
-              nodeStart: options?.nodeStart,
-              nodeStep: options?.nodeStep,
-              defaultDiameter: options?.defaultDiameter,
-              defaultWallThickness: options?.defaultWallThickness,
-              defaultCorrosionAllowance: options?.defaultCorrosionAllowance,
-              defaultInsulationThickness: options?.defaultInsulationThickness,
-            },
-          });
-          const jsonXmlOutput = jsonToXmlResponse.outputs?.[0];
-          if (jsonXmlOutput && typeof jsonXmlOutput.text === 'string') {
+          let usedJsonPath = false;
+          try {
+            const stagedResult = _buildXmlFromStagedJsonText(jsonOutput.text, jsonOutput.name, options);
             stages.push({ title: `Native JSON bridge ${nativeJson.endpoint || ''}`.trim(), logs: nativeJson.logs });
-            stages.push({ title: 'JSON -> XML', logs: jsonToXmlResponse.logs });
+            stages.push({
+              title: 'StagedJSON -> XML',
+              logs: {
+                stdout: [
+                  `Staged hierarchy detected: ${stagedResult.branchCount} branch(es), ${stagedResult.nodeCount} node(s).`,
+                ],
+                stderr: stagedResult.skippedComponents > 0
+                  ? [`Skipped ${stagedResult.skippedComponents} component(s) with incomplete coordinates.`]
+                  : [],
+              },
+            });
             return {
               outputs: [
                 {
                   name: `${stem}_rvmattr_to_xml.xml`,
-                  text: jsonXmlOutput.text,
+                  text: stagedResult.xmlText,
                   mime: 'text/xml;charset=utf-8',
                 },
                 {
                   name: `${stem}_managed_stage.json`,
-                  text: jsonOutput.text,
+                  text: stagedResult.stageJsonText,
                   mime: 'application/json;charset=utf-8',
                 },
               ],
               logs: _mergeStageLogs(stages),
               endpoint: nativeJson.endpoint,
             };
+          } catch {}
+
+          try {
+            const parsedPayload = JSON.parse(jsonOutput.text);
+            const bboxLeafCount = _collectBboxLeafCount(parsedPayload);
+            if (bboxLeafCount > 0) {
+              const jsonToXmlResponse = await runtime.runJob({
+                converterId: 'json_to_xml',
+                inputFiles: [{ role: 'primary', name: jsonOutput.name, bytes: _encodeTextUtf8(jsonOutput.text) }],
+                options: {
+                  coordFactor: options?.coordFactor,
+                  nodeStart: options?.nodeStart,
+                  nodeStep: options?.nodeStep,
+                  defaultDiameter: options?.defaultDiameter,
+                  defaultWallThickness: options?.defaultWallThickness,
+                  defaultCorrosionAllowance: options?.defaultCorrosionAllowance,
+                  defaultInsulationThickness: options?.defaultInsulationThickness,
+                },
+              });
+              const jsonXmlOutput = jsonToXmlResponse.outputs?.[0];
+              if (jsonXmlOutput && typeof jsonXmlOutput.text === 'string') {
+                usedJsonPath = true;
+                stages.push({ title: `Native JSON bridge ${nativeJson.endpoint || ''}`.trim(), logs: nativeJson.logs });
+                stages.push({ title: 'JSON -> XML', logs: jsonToXmlResponse.logs });
+                return {
+                  outputs: [
+                    {
+                      name: `${stem}_rvmattr_to_xml.xml`,
+                      text: jsonXmlOutput.text,
+                      mime: 'text/xml;charset=utf-8',
+                    },
+                    {
+                      name: `${stem}_managed_stage.json`,
+                      text: jsonOutput.text,
+                      mime: 'application/json;charset=utf-8',
+                    },
+                  ],
+                  logs: _mergeStageLogs(stages),
+                  endpoint: nativeJson.endpoint,
+                };
+              }
+            }
+          } catch {}
+
+          if (!usedJsonPath) {
+            stages.push({
+              title: 'JSON -> XML fallback note',
+              logs: {
+                stdout: [],
+                stderr: ['Native JSON payload did not match staged hierarchy or bbox-leaf JSON; falling back to REV -> XML.'],
+              },
+            });
           }
         }
       }
@@ -1039,7 +1386,7 @@ export function renderModelConvertersTab(container) {
         <label class="model-converters-label">
           <span>Converter</span>
           <select id="model-converters-select">
-            ${Object.values(CONVERTER_DEFS).map((def) => `
+            ${ORDERED_CONVERTER_DEFS.map((def) => `
               <option value="${def.id}" ${def.id === selectedConverter ? 'selected' : ''}>${_esc(def.label)}</option>
             `).join('')}
           </select>
@@ -1280,6 +1627,15 @@ export function renderModelConvertersTab(container) {
       return;
     }
 
+    if (selectedConverter === 'pdf_to_inputxml_cii14' && !secondaryFile) {
+      const msg = 'Benchmark Input XML is required for PDF -> InputXML (CII14).';
+      setStatus(`Failed: ${msg}`, 'bad');
+      outputEl.innerHTML = '<span class="model-converters-muted">No output generated.</span>';
+      setLogs([msg]);
+      notify({ level: 'warning', title: 'Converter', message: msg });
+      return;
+    }
+
     if (primaryFile && (selectedConverter === 'rvm_to_rev' || selectedConverter === 'rvmattr_to_xml') && !_isRvmFileName(primaryFile.name)) {
       notify({ level: 'error', title: 'Converter', message: `Selected file "${primaryFile.name}" is not .rvm. Use RVM input for ${def.label}.` });
       return;
@@ -1356,6 +1712,30 @@ export function renderModelConvertersTab(container) {
         } else {
           throw new Error('Select RVM primary input, or provide ATT/TXT sidecar for ATT-only XML synthesis.');
         }
+      } else if (selectedConverter === 'stagedjson_to_xml') {
+        if (!primaryFile || !primaryBytes) {
+          throw new Error('Primary staged JSON input is required for StagedJSON -> XML conversion.');
+        }
+        const stagedJsonText = _decodeTextUtf8(primaryBytes);
+        const stagedResult = _buildXmlFromStagedJsonText(stagedJsonText, primaryFile.name, activeValues());
+        response = {
+          outputs: [
+            {
+              name: `${_baseNameWithoutExtension(primaryFile.name)}_stagedjson_to_xml.xml`,
+              text: stagedResult.xmlText,
+              mime: 'text/xml;charset=utf-8',
+            },
+          ],
+          logs: {
+            stdout: [
+              `Staged hierarchy parsed: ${stagedResult.branchCount} branch(es).`,
+              `Generated ${stagedResult.nodeCount} node(s) into PSI-style XML.`,
+            ],
+            stderr: stagedResult.skippedComponents > 0
+              ? [`Skipped ${stagedResult.skippedComponents} component(s) with incomplete coordinates.`]
+              : [],
+          },
+        };
       } else {
         if (!primaryFile || !primaryBytes) {
           throw new Error('Primary input file is required for this converter.');

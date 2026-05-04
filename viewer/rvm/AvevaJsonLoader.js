@@ -645,6 +645,14 @@ function routeBranchChildren(branchNode, rawRoutingConfig) {
   const srcChildrenRaw = Array.isArray(branchNode?.children) ? branchNode.children : [];
   const srcChildren = srcChildrenRaw.map((child) => ensureSyntheticEndpointsFromBBox(child));
   if (!srcChildren.length) return [];
+  const branchAttrs = getAttrs(branchNode);
+
+  // REV->XML local import already carries explicit route-bearing PIPE and fitting entries.
+  // Auto-routing here would drop source PIPE children and regenerate synthetic links,
+  // which degrades topology fidelity into skeleton-like fan-outs.
+  if (String(branchAttrs.SOURCE_FORMAT || '').toUpperCase() === 'REV_XML') {
+    return srcChildren;
+  }
 
   const paired = srcChildren.map((child, index) => ({ child, raw: srcChildrenRaw[index] }));
   const filteredPairs = paired.filter((entry) => !isPipeLike(entry.child));
@@ -774,7 +782,6 @@ function routeBranchChildren(branchNode, rawRoutingConfig) {
   // Bridge HPOS → first fitting and last fitting → TPOS with synthetic stub pipes.
   // The fitting-to-fitting loop only routes adjacent pairs; these stubs cover the
   // physical pipe run between the branch connection point and the nearest fitting.
-  const branchAttrs = getAttrs(branchNode);
   const hpos = normalizeCoord(branchAttrs.HPOS ?? branchNode.HPOS);
   const tpos = normalizeCoord(branchAttrs.TPOS ?? branchNode.TPOS);
 
@@ -1297,6 +1304,7 @@ function buildSegmentMesh(element, currentPath, defaultRadius, renderContext) {
   else if (type === 'REDUCER') color = 0x8f8f8f;
   else if (type === 'ELBOW' || type === 'BEND') color = 0xaa55aa;
   else if (type === 'TEE' || type === 'OLET') color = 0x55aa55;
+  else if (type === 'INST') color = 0xb53f3f;
   else if (SUPPORT_TYPES.has(type)) color = 0x2a5fa8;
 
   const webColor = 0xaaaaaa;
@@ -1428,6 +1436,7 @@ function buildBBoxMesh(element, currentPath, renderContext) {
   if (type === 'UNKNOWN' || type === 'BRANCH') return null;
   const pipeColor = 0x3d74c5;
   const valveColor = 0xcc2222;
+  const instColor = 0xb53f3f;
   const flangeColor = 0x9a9a9a;
   const elbowColor = 0xaa55aa;
   const teeColor = 0x55aa55;
@@ -1443,6 +1452,8 @@ function buildBBoxMesh(element, currentPath, renderContext) {
     const radius = Math.max(minDim * 0.45, 0.0005);
     if (type === 'VALVE') {
       renderable = buildValveAssembly(start, end, radius, valveColor, flangeColor, webColor);
+    } else if (type === 'INST') {
+      renderable = buildValveAssembly(start, end, radius, instColor, flangeColor, webColor);
     } else if (type === 'FLANGE' || type === 'GASK') {
       renderable = buildFlangeAssembly(start, end, radius, flangeColor, webColor);
     } else if (type === 'TEE' || type === 'OLET') {

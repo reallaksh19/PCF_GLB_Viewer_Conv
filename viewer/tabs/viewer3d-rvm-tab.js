@@ -147,12 +147,13 @@ function _bindBundleLoader(container) {
 
     // 1. Process RVM + Sidecars together
     for (const rvmFile of rvmFiles) {
+        const importKind = rvmFile.name.toLowerCase().endsWith('.rev') ? 'raw-rev' : 'raw-rvm';
         emit(RuntimeEvents.FILE_LOADED, { 
             name: rvmFile.name, 
             source: 'rvm-tab', 
             payload: rvmFile,
             sidecars: sidecars, // Pass sidecars to RVM bridge
-            kind: 'raw-rvm' 
+            kind: importKind 
         });
     }
 

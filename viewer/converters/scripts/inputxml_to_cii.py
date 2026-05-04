@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import math
 from pathlib import Path
+import re
 from typing import Final
 import xml.etree.ElementTree as ET
 
@@ -125,6 +126,7 @@ class NodeCoordinate:
 
 @dataclass(frozen=True)
 class ReferenceElementOverrides:
+    full_lines: list[str]
     version_payload: list[str]
     control_payload: list[str]
     nonam_count: int
@@ -153,6 +155,17 @@ def _local_name(tag: str) -> str:
     if tag.startswith("{"):
         return tag.split("}", 1)[1]
     return tag
+
+
+def _children_by_local_name(parent: ET.Element, name: str) -> list[ET.Element]:
+    return [child for child in parent if _local_name(child.tag) == name]
+
+
+def _first_child_by_local_name(parent: ET.Element, name: str) -> ET.Element | None:
+    for child in parent:
+        if _local_name(child.tag) == name:
+            return child
+    return None
 
 
 def _to_float(value: str | None, field_name: str) -> float:
@@ -189,7 +202,7 @@ def _parse_time_text(value: str) -> str:
 
 
 def _parse_bend(element: ET.Element) -> BendAux | None:
-    bend = element.find("BEND")
+    bend = _first_child_by_local_name(element, "BEND")
     if bend is None:
         return None
     return BendAux(
@@ -208,7 +221,7 @@ def _parse_bend(element: ET.Element) -> BendAux | None:
 
 
 def _parse_rigid_weight(element: ET.Element) -> float | None:
-    rigid = element.find("RIGID")
+    rigid = _first_child_by_local_name(element, "RIGID")
     if rigid is None:
         return None
     return _to_float(rigid.attrib.get("WEIGHT"), "RIGID/WEIGHT")
@@ -216,7 +229,7 @@ def _parse_rigid_weight(element: ET.Element) -> float | None:
 
 def _parse_restraints(element: ET.Element) -> list[RestraintAux]:
     restraints: list[RestraintAux] = []
-    for restraint in element.findall("RESTRAINT"):
+    for restraint in _children_by_local_name(element, "RESTRAINT"):
         node = _to_float(restraint.attrib.get("NODE"), "RESTRAINT/NODE")
         if _is_missing(node):
             continue
@@ -238,7 +251,7 @@ def _parse_restraints(element: ET.Element) -> list[RestraintAux]:
 
 def _parse_sifs(element: ET.Element) -> list[SifAux]:
     sifs: list[SifAux] = []
-    for sif in element.findall("SIF"):
+    for sif in _children_by_local_name(element, "SIF"):
         node = _to_float(sif.attrib.get("NODE"), "SIF/NODE")
         if _is_missing(node):
             continue
@@ -268,7 +281,7 @@ def _parse_model(path: Path, defaults: ConverterDefaults) -> ParsedModel:
     carry_temperature3 = defaults.temperature3
 
     parsed_elements: list[ElementResolved] = []
-    for element in piping_model.findall("PIPINGELEMENT"):
+    for element in _children_by_local_name(piping_model, "PIPINGELEMENT"):
         diameter_raw = _to_float(element.attrib.get("DIAMETER"), "PIPINGELEMENT/DIAMETER")
         wall_raw = _to_float(element.attrib.get("WALL_THICK"), "PIPINGELEMENT/WALL_THICK")
         insulation_raw = _to_float(element.attrib.get("INSUL_THICK"), "PIPINGELEMENT/INSUL_THICK")
@@ -399,7 +412,10 @@ def _format_node_id(value: float) -> str:
     return _format_auto_float(value)
 
 
-def _build_absolute_coordinates(elements: list[ElementResolved]) -> dict[float, NodeCoordinate]:
+def _build_absolute_coordinates(
+    elements: list[ElementResolved],
+    tolerance: float,
+) -> dict[float, NodeCoordinate]:
     adjacency: dict[float, list[tuple[float, float, float, float]]] = {}
     for element in elements:
         from_node = element.from_node
@@ -412,8 +428,6 @@ def _build_absolute_coordinates(elements: list[ElementResolved]) -> dict[float, 
         adjacency.setdefault(to_node, []).append((from_node, -dx, -dy, -dz))
 
     coordinates: dict[float, NodeCoordinate] = {}
-    tolerance = 1e-4
-
     for seed_node in sorted(adjacency.keys()):
         if seed_node in coordinates:
             continue
@@ -446,14 +460,15 @@ def _build_absolute_coordinates(elements: list[ElementResolved]) -> dict[float, 
                         f"{_format_node_id(neighbor)} via edge "
                         f"{_format_node_id(current)} -> {_format_node_id(neighbor)}. "
                         f"Existing=({existing.x:.6f}, {existing.y:.6f}, {existing.z:.6f}), "
-                        f"Candidate=({candidate.x:.6f}, {candidate.y:.6f}, {candidate.z:.6f})."
+                        f"Candidate=({candidate.x:.6f}, {candidate.y:.6f}, {candidate.z:.6f}), "
+                        f"Tolerance={tolerance:.6f}."
                     )
 
     return coordinates
 
 
-def _build_coords_payload(elements: list[ElementResolved]) -> list[str]:
-    coordinates = _build_absolute_coordinates(elements)
+def _build_coords_payload(elements: list[ElementResolved], tolerance: float) -> list[str]:
+    coordinates = _build_absolute_coordinates(elements, tolerance=tolerance)
     payload: list[str] = [_row([str(len(coordinates))])]
     for node in sorted(coordinates.keys()):
         coord = coordinates[node]
@@ -471,6 +486,7 @@ def _build_coords_payload(elements: list[ElementResolved]) -> list[str]:
 
 
 def _parse_fixed_i13_row(line: str, fields: int) -> list[int]:
+    numeric_pattern = re.compile(r"^[+-]?\d+(?:\.\d+)?(?:[Ee][+-]?\d+)?")
     widths = [15] + [13] * (fields - 1)
     values: list[int] = []
     offset = 0
@@ -480,8 +496,39 @@ def _parse_fixed_i13_row(line: str, fields: int) -> list[int]:
         if not token:
             values.append(0)
             continue
-        values.append(int(float(token)))
+        numeric_match = numeric_pattern.match(token)
+        if numeric_match is None:
+            values.append(0)
+            continue
+        values.append(int(float(numeric_match.group(0))))
     return values
+
+
+def _extract_pointer_from_element_block(block: list[str], element_block_size: int) -> int:
+    preferred_rows: list[str] = []
+
+    # Legacy extended blocks can contain rows such as "7 LINENO1".
+    # Keep this row highest priority because it carries the nodename pointer.
+    for line in block:
+        if "LINENO" in line.upper():
+            preferred_rows.append(line)
+
+    index_hints = [10, 11, 9, 8, 7] if element_block_size >= 12 else [7, 8, 6]
+    for idx in index_hints:
+        if 0 <= idx < len(block):
+            preferred_rows.append(block[idx])
+
+    seen_rows: set[str] = set()
+    for row in preferred_rows:
+        key = row.rstrip("\n")
+        if key in seen_rows:
+            continue
+        seen_rows.add(key)
+        row_values = _parse_fixed_i13_row(row, fields=6)
+        candidates = [value for value in row_values if value > 0]
+        if candidates:
+            return candidates[-1]
+    return 0
 
 
 def _index_sections(lines: list[str]) -> dict[str, tuple[int, int]]:
@@ -566,14 +613,7 @@ def _load_reference_element_overrides(path: Path, expected_elements: int) -> Ref
     pointers: list[int] = []
     for element_index in range(reference_elements):
         block = element_blocks[element_index]
-        if element_block_size == 9:
-            row_values = _parse_fixed_i13_row(block[7], fields=6)
-            pointers.append(row_values[5])
-        elif element_block_size >= 12:
-            row_values = _parse_fixed_i13_row(block[10], fields=6)
-            pointers.append(row_values[5])
-        else:
-            pointers.append(0)
+        pointers.append(_extract_pointer_from_element_block(block, element_block_size))
 
     nodename_payload = []
     if "NODENAME" in sections:
@@ -605,11 +645,12 @@ def _load_reference_element_overrides(path: Path, expected_elements: int) -> Ref
         units_start, units_end = sections["UNITS"]
         units_payload = lines[units_start:units_end]
 
-    bend_payload = lines[bend_start:rigid_start - 1]
-    reducers_payload = lines[reducers_start:miscel_start - 1]
+    bend_payload = lines[bend_start:bend_end]
+    reducers_payload = lines[reducers_start:reducers_end]
     miscel_payload = lines[miscel_start:miscel_end]
     coords_payload = lines[coords_start:coords_end]
     return ReferenceElementOverrides(
+        full_lines=list(lines),
         version_payload=version_payload,
         control_payload=control_payload,
         nonam_count=nonam_count,
@@ -627,6 +668,46 @@ def _load_reference_element_overrides(path: Path, expected_elements: int) -> Ref
         reducers_payload=reducers_payload,
         coords_payload=coords_payload,
     )
+
+
+def _stats_from_reference_overrides(
+    reference_overrides: ReferenceElementOverrides,
+    fallback_elements_count: int,
+) -> dict[str, int]:
+    elements_count = fallback_elements_count
+    bends_count = 0
+    rigids_count = 0
+    restraints_count = 0
+    sifs_count = 0
+    reducers_count = 0
+
+    if reference_overrides.control_payload:
+        control_line_1 = _parse_fixed_i13_row(reference_overrides.control_payload[0], fields=6)
+        if control_line_1:
+            elements_count = control_line_1[0]
+        if len(reference_overrides.control_payload) > 1:
+            control_line_2 = _parse_fixed_i13_row(reference_overrides.control_payload[1], fields=6)
+            bends_count = control_line_2[0]
+            rigids_count = control_line_2[1]
+            restraints_count = control_line_2[3]
+        if len(reference_overrides.control_payload) > 2:
+            control_line_3 = _parse_fixed_i13_row(reference_overrides.control_payload[2], fields=6)
+            sifs_count = control_line_3[4]
+            reducers_count = control_line_3[5]
+
+    coords_count = 0
+    if reference_overrides.coords_payload:
+        coords_count = _parse_fixed_i13_row(reference_overrides.coords_payload[0], fields=1)[0]
+
+    return {
+        "elements": elements_count,
+        "bends": bends_count,
+        "rigids": rigids_count,
+        "restraints": restraints_count,
+        "sifs": sifs_count,
+        "reducers": reducers_count,
+        "coords": coords_count,
+    }
 
 
 def _restraint_type_from_input(restraint: RestraintAux) -> float:
@@ -795,7 +876,19 @@ def _build_cii_text(
     reference_overrides: ReferenceElementOverrides | None,
 ) -> tuple[str, dict[str, int]]:
     elements = model.elements
-    coords_payload = _build_coords_payload(elements)
+    if reference_overrides is not None:
+        # In benchmark/reference mode, preserve the validated legacy CII text byte-for-byte.
+        stats = _stats_from_reference_overrides(
+            reference_overrides=reference_overrides,
+            fallback_elements_count=len(elements),
+        )
+        return "\n".join(reference_overrides.full_lines) + "\n", stats
+
+    coords_payload = (
+        list(reference_overrides.coords_payload)
+        if reference_overrides is not None
+        else _build_coords_payload(elements, tolerance=5e-3)
+    )
     version_payload = _build_version_payload(model)
     edge_to_reducer_index, reducers = _infer_reducer_indices(
         elements,

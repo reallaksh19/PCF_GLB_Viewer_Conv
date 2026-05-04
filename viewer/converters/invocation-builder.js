@@ -48,6 +48,9 @@ function converterSpec(converterId) {
   if (converterId === 'rev_to_stp') return { script: 'rev_to_stp.py', extension: '.stp' };
   if (converterId === 'xml_to_cii') return { script: 'xml_to_cii.py', extension: '.cii' };
   if (converterId === 'inputxml_to_cii') return { script: 'inputxml_to_cii.py', extension: '.cii' };
+  if (converterId === 'inputxml14_to_cii') return { script: 'inputxml_to_cii.py', extension: '.cii' };
+  if (converterId === 'pdf_to_inputxml') return { script: 'pdf_to_inputxml.py', extension: '.xml' };
+  if (converterId === 'pdf_to_inputxml_cii14') return { script: 'pdf_to_inputxml_cii14.py', extension: '.xml' };
   throw new Error(`Unsupported converter "${converterId}".`);
 }
 
@@ -56,7 +59,9 @@ export function buildInvocation(converterId, primaryPath, primaryName, secondary
   const scriptPath = `/scripts/${spec.script}`;
   const outputFileName = outputName(primaryName, converterId, spec.extension);
   const outputPath = `${jobDir}/${outputFileName}`;
-  const argv = [scriptPath, '--input', primaryPath, '--output', outputPath];
+  const argv = (converterId === 'pdf_to_inputxml' || converterId === 'pdf_to_inputxml_cii14')
+    ? [scriptPath, '--input-pdf', primaryPath, '--output', outputPath]
+    : [scriptPath, '--input', primaryPath, '--output', outputPath];
 
   if (converterId === 'rvm_to_rev') {
     if (secondaryPath) argv.push('--attributes', secondaryPath);
@@ -98,7 +103,7 @@ export function buildInvocation(converterId, primaryPath, primaryName, secondary
   } else if (converterId === 'xml_to_cii') {
     const mode = toStringValue(options?.coordsMode).trim().toLowerCase();
     argv.push('--coords-mode', mode === 'all' || mode === 'none' ? mode : 'first');
-  } else if (converterId === 'inputxml_to_cii') {
+  } else if (converterId === 'inputxml_to_cii' || converterId === 'inputxml14_to_cii') {
     if (secondaryPath) argv.push('--reference-cii', secondaryPath);
     if (options?.inferReducerAngleFromGeometry) argv.push('--infer-reducer-angle-from-geometry');
     pushOptionalNumberArg(argv, '--default-diameter', options?.defaultDiameter);
@@ -109,6 +114,13 @@ export function buildInvocation(converterId, primaryPath, primaryName, secondary
     pushOptionalNumberArg(argv, '--default-temperature2', options?.defaultTemperature2);
     pushOptionalNumberArg(argv, '--default-temperature3', options?.defaultTemperature3);
     pushOptionalNumberArg(argv, '--default-reducer-angle', options?.defaultReducerAngle);
+  } else if (converterId === 'pdf_to_inputxml') {
+    if (secondaryPath) argv.push('--misc-pdf', secondaryPath);
+  } else if (converterId === 'pdf_to_inputxml_cii14') {
+    if (!secondaryPath) throw new Error('Benchmark Input XML is required for PDF -> InputXML (CII14).');
+    argv.push('--benchmark-xml', secondaryPath);
+    const outputMode = toStringValue(options?.outputMode).trim().toLowerCase();
+    argv.push('--output-mode', outputMode === 'overlay' ? 'overlay' : 'preserve');
   }
 
   return {

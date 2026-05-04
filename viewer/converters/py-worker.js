@@ -15,6 +15,10 @@ const SCRIPT_FILE_NAMES = Object.freeze([
   'rev_to_stp.py',
   'xml_to_cii.py',
   'inputxml_to_cii.py',
+  'pdf_to_inputxml.py',
+  'pdf_to_inputxml_cii14.py',
+  'pdf_to_inputxml_profiles.json',
+  'pdf_inputxml_profile_bm_cii.xml',
   'rvm_attribute_to_xml.py',
   'rvm_attribute_to_xml_to_cii.py',
 ]);
