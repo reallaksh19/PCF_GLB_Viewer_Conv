@@ -30,7 +30,6 @@ function outputName(primaryName, converterId, extension) {
 function pushOptionalStringArg(argv, flag, value) {
   const text = toStringValue(value).trim();
   if (!text) return;
-  // Use --flag=value so values starting with "-" are parsed as data, not option flags.
   argv.push(`${flag}=${text}`);
 }
 
@@ -45,6 +44,7 @@ function converterSpec(converterId) {
   if (converterId === 'rev_to_pcf') return { script: 'rev_to_pcf.py', extension: '.pcf' };
   if (converterId === 'rev_to_xml') return { script: 'rev_to_xml.py', extension: '.xml' };
   if (converterId === 'json_to_xml') return { script: 'json_to_xml.py', extension: '.xml' };
+  if (converterId === 'stagedjson_to_xml') return { script: 'stagedjson_to_xml.py', extension: '.xml' };
   if (converterId === 'rev_to_stp') return { script: 'rev_to_stp.py', extension: '.stp' };
   if (converterId === 'xml_to_cii') return { script: 'xml_to_cii.py', extension: '.cii' };
   if (converterId === 'inputxml_to_cii') return { script: 'inputxml_to_cii.py', extension: '.cii' };
@@ -95,6 +95,16 @@ export function buildInvocation(converterId, primaryPath, primaryName, secondary
     pushOptionalNumberArg(argv, '--mock-material-number', options?.mockMaterialNumber);
     pushOptionalNumberArg(argv, '--mock-insulation-density', options?.mockInsulationDensity);
     pushOptionalNumberArg(argv, '--mock-fluid-density', options?.mockFluidDensity);
+  } else if (converterId === 'stagedjson_to_xml') {
+    pushOptionalNumberArg(argv, '--node-start', options?.nodeStart);
+    pushOptionalNumberArg(argv, '--node-step', options?.nodeStep);
+    pushOptionalStringArg(argv, '--source', options?.source);
+    pushOptionalStringArg(argv, '--purpose', options?.purpose);
+    pushOptionalStringArg(argv, '--title-line', options?.titleLine);
+    pushOptionalNumberArg(argv, '--default-diameter', options?.defaultDiameter);
+    pushOptionalNumberArg(argv, '--default-wall-thickness', options?.defaultWallThickness);
+    pushOptionalNumberArg(argv, '--default-corrosion-allowance', options?.defaultCorrosionAllowance);
+    pushOptionalNumberArg(argv, '--default-insulation-thickness', options?.defaultInsulationThickness);
   } else if (converterId === 'rev_to_stp') {
     argv.push('--coord-factor', String(toFiniteNumber(options?.coordFactor, 1000)));
     pushOptionalStringArg(argv, '--support-path-contains', options?.supportPathContains);
