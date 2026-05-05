@@ -54,6 +54,7 @@
 <div class="print-only" id="print-sections-extra"></div>
 
 <script type="module">
+  import './converters/stagedjson-xml-preserve-fittings.js';
   import { init } from './core/app.js';
   init().catch((error) => {
     console.error('Viewer bootstrap failed.', error);
