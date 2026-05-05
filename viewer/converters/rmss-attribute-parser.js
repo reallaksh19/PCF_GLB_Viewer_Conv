@@ -10,12 +10,16 @@
  * - Use exact component ports APOS/LPOS/BPOS only.
  * - Include INST in routing only when routeThroughInstEnabled=true and
  *   the node exposes valid inline metadata + route ports.
+ * - Preserve ATTA supports even when CMPSUPTYPE is absent and support intent
+ *   is carried only by DTXR/description/name, e.g. DTXR=REST/GUIDE/LINE STOP/LIMIT.
  */
 
 const FITTING_TYPES = new Set(['VALV', 'FLAN', 'ELBO', 'BEND', 'TEE', 'OLET', 'GASK', 'REDU', 'INST']);
-const SOURCE_TYPES = new Set(['VALV', 'FLAN', 'ELBO', 'BEND', 'TEE', 'OLET', 'GASK', 'REDU', 'ATTA', 'INST']);
+const SOURCE_TYPES = new Set(['VALV', 'FLAN', 'ELBO', 'BEND', 'TEE', 'OLET', 'GASK', 'REDU', 'ATTA', 'ANCI', 'SUPP', 'SUPPORT', 'INST']);
 const ROUTE_PORT_KEYS = ['APOS', 'LPOS', 'BPOS'];
 const PIPE_ROUTE_GAP_MM = 1.0;
+const SUPPORT_KIND_RE = /\b(GUIDE|LINE\s*STOP|LINESTOP|LIMIT\s*STOP|LIMIT|RESTING|REST|SHOE|BP|BASE\s*PLATE|ANCHOR|FIXED|STOPPER|STOP)\b/i;
+const SUPPORT_TAG_RE = /\bPS[-_\s]?[A-Z0-9][A-Z0-9._/\-]*\b/i;
 const TOPOLOGY_METHODS = Object.freeze({
   STRICT: 'topology_strict',
   LEGACY: 'topology_legacy',
@@ -28,23 +32,35 @@ const DEFAULT_ROUTE_OPTIONS = Object.freeze({
 
 function parseCoord(value) {
   if (!value) return null;
+  if (typeof value === 'object' && Number.isFinite(value.x) && Number.isFinite(value.y) && Number.isFinite(value.z)) {
+    return { x: value.x, y: value.y, z: value.z };
+  }
+  if (Array.isArray(value) && value.length >= 3) {
+    const x = Number.parseFloat(String(value[0]).replace(/mm/gi, '').trim());
+    const y = Number.parseFloat(String(value[1]).replace(/mm/gi, '').trim());
+    const z = Number.parseFloat(String(value[2]).replace(/mm/gi, '').trim());
+    return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) ? { x, y, z } : null;
+  }
   const text = String(value).trim();
   if (!text) return null;
   const tokens = text.split(/\s+/g);
   const out = { x: 0, y: 0, z: 0 };
+  let parsedDirectional = false;
   for (let i = 0; i < tokens.length - 1; i += 2) {
-    const axis = tokens[i];
+    const axis = tokens[i].toUpperCase();
     const raw = tokens[i + 1].replace(/mm/gi, '');
     const num = Number.parseFloat(raw);
     if (!Number.isFinite(num)) continue;
-    if (axis === 'E') out.x = num;
-    else if (axis === 'W') out.x = -num;
-    else if (axis === 'N') out.y = num;
-    else if (axis === 'S') out.y = -num;
-    else if (axis === 'U') out.z = num;
-    else if (axis === 'D') out.z = -num;
+    if (axis === 'E') { out.x = num; parsedDirectional = true; }
+    else if (axis === 'W') { out.x = -num; parsedDirectional = true; }
+    else if (axis === 'N') { out.y = num; parsedDirectional = true; }
+    else if (axis === 'S') { out.y = -num; parsedDirectional = true; }
+    else if (axis === 'U') { out.z = num; parsedDirectional = true; }
+    else if (axis === 'D') { out.z = -num; parsedDirectional = true; }
   }
-  return out;
+  if (parsedDirectional) return out;
+  const vals = text.match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
+  return vals.length >= 3 ? { x: vals[0], y: vals[1], z: vals[2] } : null;
 }
 
 function coordDistance(a, b) {
@@ -100,13 +116,82 @@ function parseTextBlocks(content) {
 }
 
 // Bore fields in order of reliability for AVEVA PDMS/E3D.
-const BORE_FIELDS = ['HBOR', 'TBOR', 'ABORE', 'LBORE', 'DTXR'];
+// DTXR is intentionally excluded by default: it can contain support text such as GUIDE/REST.
+const BORE_FIELDS = ['HBOR', 'TBOR', 'ABORE', 'LBORE', 'BORE', 'NBORE', 'DBOR'];
+
+function normalizeSupportType(attrs, fallbackText = '') {
+  const text = [
+    attrs?.CMPSUPTYPE,
+    attrs?.DTXR,
+    attrs?.SUPPORT_TYPE,
+    attrs?.SUPTYPE,
+    attrs?.SKEY,
+    attrs?.SPRE,
+    attrs?.NAME,
+    attrs?.TAG,
+    attrs?.DESCRIPTION,
+    attrs?.DESC,
+    fallbackText,
+  ].map((value) => String(value || '').toUpperCase()).join(' ');
+
+  if (/\bGUIDE\b/.test(text)) return 'GUIDE';
+  if (/\bLINE\s*STOP\b|\bLINESTOP\b|\bSTOPPER\b|\bSTOP\b/.test(text)) return 'LINESTOP';
+  if (/\bLIMIT\s*STOP\b|\bLIMIT\b/.test(text)) return 'LIMIT';
+  if (/\bRESTING\b|\bREST\b|\bSHOE\b|\bBP\b|\bBASE\s*PLATE\b/.test(text)) return 'REST';
+  if (/\bANCHOR\b|\bFIXED\b/.test(text)) return 'ANCHOR';
+  return '';
+}
+
+function hasSupportIntent(attrs, fallbackText = '') {
+  return Boolean(normalizeSupportType(attrs, fallbackText)) || SUPPORT_KIND_RE.test([
+    attrs?.CMPSUPTYPE,
+    attrs?.DTXR,
+    attrs?.NAME,
+    attrs?.TAG,
+    attrs?.DESCRIPTION,
+    attrs?.DESC,
+    fallbackText,
+  ].map((value) => String(value || '')).join(' '));
+}
+
+function supportTag(attrs, id, baseName) {
+  const candidates = [
+    attrs?.CMPSUPREFN,
+    attrs?.NAME,
+    attrs?.TAG,
+    attrs?.TAGNO,
+    attrs?.ITEMCODE,
+    attrs?.PARTNO,
+    attrs?.REF,
+    attrs?.REFNO,
+    attrs?.DBREF,
+    attrs?.COMPONENTREFNO,
+    attrs?.CA97,
+    attrs?.CA98,
+    attrs?.SKEY,
+    attrs?.SPRE,
+    attrs?.DESCRIPTION,
+    attrs?.DESC,
+    baseName,
+    id,
+  ];
+  for (const candidate of candidates) {
+    const match = SUPPORT_TAG_RE.exec(String(candidate || ''));
+    if (match) return match[0].replace(/\s+/g, '-');
+  }
+  return String(attrs?.CMPSUPREFN || attrs?.NAME || baseName || id || 'SUPPORT').trim();
+}
 
 function extractBore(attrs) {
   for (const field of BORE_FIELDS) {
     const v = attrs?.[field];
     const n = v ? Number.parseFloat(String(v).replace(/mm/gi, '').trim()) : NaN;
     if (Number.isFinite(n) && n > 0) return { field, value: n, raw: v };
+  }
+  // Some exports put numeric diameter in DTXR; accept it only when it is not support text.
+  if (attrs?.DTXR && !hasSupportIntent(attrs)) {
+    const n = Number.parseFloat(String(attrs.DTXR).replace(/mm/gi, '').trim());
+    if (Number.isFinite(n) && n > 0) return { field: 'DTXR', value: n, raw: attrs.DTXR };
   }
   return null;
 }
@@ -128,6 +213,20 @@ function shouldIncludeInst(attrs, apos, lpos) {
   return hasInlineRouteMetadata(attrs);
 }
 
+function pickSupportPosition(attrs, apos, lpos, bpos, pos) {
+  const supportPos = parseCoord(attrs?.SUPPORTCOORD)
+    || parseCoord(attrs?.SUPPORT_COORD)
+    || parseCoord(attrs?.SCOORD)
+    || parseCoord(attrs?.COORDS)
+    || parseCoord(attrs?.CO_ORDS)
+    || parseCoord(attrs?.CO_ORD)
+    || pos
+    || bpos
+    || apos
+    || lpos;
+  return supportPos || null;
+}
+
 function toNode(comp) {
   const type = String(comp?.attributes?.TYPE || '').toUpperCase();
   const baseName = String(comp?.attributes?.NAME || comp?.id || '').trim() || 'Unnamed';
@@ -138,30 +237,40 @@ function toNode(comp) {
   const tpos = parseCoord(comp?.attributes?.TPOS);
   const pos = parseCoord(comp?.attributes?.POS);
 
-  if (type === 'ATTA') {
-    if (!comp?.attributes?.CMPSUPTYPE) return null;
+  const rawAttrs = {};
+  for (const [k, v] of Object.entries(comp.attributes || {})) rawAttrs[k] = v;
+
+  const isSupportType = ['ATTA', 'ANCI', 'SUPP', 'SUPPORT'].includes(type);
+  if (isSupportType) {
+    const normalizedSupportType = normalizeSupportType(comp.attributes, baseName);
+    const tag = supportTag(comp.attributes, comp.id, baseName);
+    const supportPosition = pickSupportPosition(comp.attributes, apos, lpos, bpos, pos);
+
+    // Preserve only meaningful support objects: CMPSUPTYPE/DTXR/support keyword or coordinate-backed ATTA.
+    if (!comp?.attributes?.CMPSUPTYPE && !normalizedSupportType && !hasSupportIntent(comp.attributes, baseName) && !supportPosition) return null;
+
     return {
-      name: `SUPPORT ${baseName}`,
+      name: `SUPPORT ${tag || baseName}`,
       type: 'SUPPORT',
       attributes: {
-        NAME: comp.attributes.NAME || baseName,
-        CMPSUPREFN: comp.attributes.CMPSUPREFN || '',
-        CMPSUPTYPE: comp.attributes.CMPSUPTYPE || '',
+        ...rawAttrs,
+        NAME: comp.attributes.NAME || tag || baseName,
+        SUPPORT_TAG: tag,
+        SUPPORT_TYPE: normalizedSupportType || comp.attributes.CMPSUPTYPE || '',
+        DTXR: comp.attributes.DTXR || normalizedSupportType || '',
+        CMPSUPREFN: comp.attributes.CMPSUPREFN || tag || '',
+        CMPSUPTYPE: comp.attributes.CMPSUPTYPE || normalizedSupportType || '',
         APOS: apos,
         LPOS: lpos,
         BPOS: bpos,
-        POS: pos
+        HPOS: hpos,
+        TPOS: tpos,
+        POS: supportPosition
       }
     };
   }
 
   if (!SOURCE_TYPES.has(type)) return null;
-
-  // Carry all raw attributes through so 3D renderer and UI can inspect them.
-  const rawAttrs = {};
-  for (const [k, v] of Object.entries(comp.attributes)) {
-    rawAttrs[k] = v;
-  }
 
   return {
     name: `${type} ${baseName}`,
@@ -296,13 +405,7 @@ function selectExactPortPair(current, next) {
       if (!Number.isFinite(gap)) continue;
       if (gap < bestGap) {
         bestGap = gap;
-        best = {
-          start: start.coord,
-          end: end.coord,
-          startKey: start.key,
-          endKey: end.key,
-          gap
-        };
+        best = { start: start.coord, end: end.coord, startKey: start.key, endKey: end.key, gap };
       }
     }
   }
@@ -378,16 +481,11 @@ function rayEntryPorts(node) {
 }
 
 function legacySequentialPair(current, next) {
-  // Primary: strict LPOS→APOS (original behaviour, preserved when both ports are present)
   const start = current?.attributes?.LPOS;
   const end = next?.attributes?.APOS;
   const gap = coordDistance(start, end);
   if (Number.isFinite(gap)) return { start, end, startKey: 'LPOS', endKey: 'APOS', gap };
 
-  // Fallback: LPOS or APOS is absent on one side. Find the closest available port pair
-  // across {APOS, LPOS, BPOS} × {APOS, LPOS, BPOS} to bridge the physical gap.
-  // Soundness: adjacent fittings in a branch are always physically closest to each other,
-  // so the minimum-distance port pair always identifies the intended pipe connection.
   const currentPorts = collectPortCandidates(current);
   const nextPorts = collectPortCandidates(next);
   if (!currentPorts.length || !nextPorts.length) return null;
@@ -480,11 +578,7 @@ function routeBranchPipes(branchName, children, branchBore, rawRouteOptions, end
       pipeAttrs[boreSrc.field] = boreSrc.raw;
       pipeAttrs.BORE_SOURCE = `inherited from ${boreSrc.field} of adjacent fitting`;
     }
-    const autoPipe = {
-      name: `PIPE AUTO ${branchName} ${autoCounter++}`,
-      type: 'PIPE',
-      attributes: pipeAttrs
-    };
+    const autoPipe = { name: `PIPE AUTO ${branchName} ${autoCounter++}`, type: 'PIPE', attributes: pipeAttrs };
     if (!syntheticAfter.has(fromEntry.node)) syntheticAfter.set(fromEntry.node, []);
     syntheticAfter.get(fromEntry.node).push(autoPipe);
     pairUsed.add(edgeKey);
@@ -537,33 +631,15 @@ function routeBranchPipes(branchName, children, branchBore, rawRouteOptions, end
             const fromPenalty = flowFrom ? (alignFrom > 0.9 ? 1.0 : 10.0) : 4.0;
             const toPenalty = flowTo ? (alignTo > 0.75 ? 1.0 : 6.0) : 3.0;
             const score = gap * fromPenalty * toPenalty;
-
-            edgeCandidates.push({
-              fromEntry,
-              toEntry,
-              pair: {
-                start: start.coord,
-                end: end.coord,
-                startKey: start.key,
-                endKey: end.key,
-                gap
-              },
-              score
-            });
+            edgeCandidates.push({ fromEntry, toEntry, pair: { start: start.coord, end: end.coord, startKey: start.key, endKey: end.key, gap }, score });
           }
         }
       }
     }
     edgeCandidates.sort((a, b) => (a.score - b.score) || (a.pair.gap - b.pair.gap));
-    for (const candidate of edgeCandidates) {
-      appendPipe(candidate.fromEntry, candidate.toEntry, candidate.pair, 'RAY');
-    }
+    for (const candidate of edgeCandidates) appendPipe(candidate.fromEntry, candidate.toEntry, candidate.pair, 'RAY');
   }
 
-  // Bridge HPOS → first fitting and last fitting → TPOS with synthetic stub pipes.
-  // These represent the physical pipe run between the branch connection point and the
-  // nearest fitting. The fitting-to-fitting loop above only routes adjacent pairs;
-  // the head/tail stubs must be created separately.
   const hpos = (endpoints?.hpos && typeof endpoints.hpos === 'object' && Number.isFinite(endpoints.hpos.x)) ? endpoints.hpos : null;
   const tpos = (endpoints?.tpos && typeof endpoints.tpos === 'object' && Number.isFinite(endpoints.tpos.x)) ? endpoints.tpos : null;
 
@@ -660,7 +736,8 @@ function parseRmssAttributes(content, rawRouteOptions) {
         TPOS: parseCoord(branch.attributes.TPOS) || branch.attributes.TPOS,
         HREF: branch.attributes.HREF,
         TREF: branch.attributes.TREF,
-        CREF: branch.attributes.CREF
+        CREF: branch.attributes.CREF,
+        NAME: branch.attributes.NAME,
       },
       children: []
     });
@@ -680,10 +757,7 @@ function parseRmssAttributes(content, rawRouteOptions) {
     const tpos = (branch.attributes.TPOS && typeof branch.attributes.TPOS === 'object') ? branch.attributes.TPOS : null;
     const routed = routeBranchPipes(branchName, branch.children, branch._boreValue, routeOptions, { hpos, tpos });
     if (!routed.length) continue;
-    out.push({
-      ...branch,
-      children: routed
-    });
+    out.push({ ...branch, children: routed });
   }
 
   return out;
