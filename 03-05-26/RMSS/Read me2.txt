@@ -1,0 +1,6 @@
+Need to create separate staggedJson to XML conversion, refer STAGGED JSON to XML error.jpg
+
+Intended graphics for staggedjson/attibute.txt/Rev , refer RMMS navis snap1.jpg and RMMS navis snap2.jpg
+
+RMS+ATTRIBUTR->XML: Refer "JsonVsCII for RMSS Att txt.jpg", note that all fittings ex:Valve/flange are lost in conversion. Elbows are also not rendered properly
+

@@ -1,0 +1,9 @@
+Do not update XML to CII.
+ 
+Need to update Input XML to CII , based on Sample INPUTXML and its respective Benchmark.CIi
+PSI116.xsd is available for reference. You may refer XML to CII, in read only mode, since its working correctly)
+
+Start with MB_CII_input.xml achieve zero error with respect to BM_CII[Benchmark].cii
+header shall be as per mmtemplate_2019.cii (common for all CII file)
+
+Then further bench mark with .../BM2-2/1/....(do not use 2-skip and 3-skip)

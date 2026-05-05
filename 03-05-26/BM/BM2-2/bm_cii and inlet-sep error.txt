@@ -1,0 +1,1 @@
+Failed: Converter exited with code 1: ValueError: Inconsistent coordinate reconstruction for node 80 via edge 90 -> 80. Existing=(722.427673, 442.400024, -6240.107535), Candidate=(722.427673, 442.400756, -6240.107528).
